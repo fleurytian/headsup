@@ -152,6 +152,12 @@ async def _send_and_update(message_id: str, device_token: str):
             ttl=message.ttl,
             subtitle=message.subtitle,
             image_url=message.image_url,
+            level=message.level,
+            sound=message.sound,
+            badge=message.badge,
+            group=message.group,
+            url=message.url,
+            auto_copy=message.auto_copy,
         )
         message.status = "delivered" if ok else "failed"
         if ok:
@@ -185,6 +191,12 @@ async def push(
         body=req.body,
         subtitle=req.subtitle,
         image_url=req.image_url,
+        level=req.level,
+        sound=req.sound,
+        badge=req.badge,
+        group=req.group,
+        url=req.url,
+        auto_copy=req.auto_copy,
         category_id=ios_category,
         data=json.dumps(req.data) if req.data else None,
         ttl=req.ttl,

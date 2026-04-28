@@ -74,6 +74,12 @@ class HeadsUp:
         body: str,
         subtitle: str | None = None,
         image_url: str | None = None,
+        level: str | None = None,         # passive | active | timeSensitive | critical
+        sound: str | None = None,         # custom sound name (must exist in app bundle)
+        badge: int | None = None,         # app icon badge count
+        group: str | None = None,         # thread identifier — groups related notifications
+        url: str | None = None,           # tap notification body to open this URL
+        auto_copy: str | None = None,     # text auto-copied to clipboard on tap
         data: dict | None = None,
         ttl: int = 3600,
         message_id: str | None = None,
@@ -88,6 +94,8 @@ class HeadsUp:
 
         Markdown markers in title/body/subtitle are stripped (iOS doesn't render markdown).
         Newlines (\\n) and emoji are preserved.
+
+        Use category="info_only" for a buttonless notification (status updates, etc).
         """
         payload = {
             "user_key": user_key,
@@ -96,14 +104,14 @@ class HeadsUp:
             "body": body,
             "ttl": ttl,
         }
-        if subtitle is not None:
-            payload["subtitle"] = subtitle
-        if image_url is not None:
-            payload["image_url"] = image_url
-        if data is not None:
-            payload["data"] = data
-        if message_id:
-            payload["message_id"] = message_id
+        for key, value in [
+            ("subtitle", subtitle), ("image_url", image_url),
+            ("level", level), ("sound", sound), ("badge", badge),
+            ("group", group), ("url", url), ("auto_copy", auto_copy),
+            ("data", data), ("message_id", message_id),
+        ]:
+            if value is not None:
+                payload[key] = value
         return self._post("/v1/push", payload)
 
     def ask(

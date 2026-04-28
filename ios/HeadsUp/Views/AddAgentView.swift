@@ -6,6 +6,9 @@ struct AddAgentView: View {
     @Environment(\.dismiss) var dismiss
     @State private var pasteText: String = ""
     @State private var error: String?
+    @State private var copiedSkillURL = false
+
+    private let skillURL = "https://headsup.md/skill.md"
 
     var body: some View {
         NavigationStack {
@@ -60,9 +63,33 @@ struct AddAgentView: View {
                 // How-to guide
                 VStack(alignment: .leading, spacing: 12) {
                     Text("怎么获得授权链接？").font(.subheadline.weight(.medium))
-                    HelpStep(num: "1", text: "让你的 AI Agent（Hermes、Claude Code、OpenClaw、Codex 等）先读 https://headsup.md/skill.md 学一下协议")
-                    HelpStep(num: "2", text: "Agent 会自己注册账号，并把它的 headsup:// 授权链接发给你")
-                    HelpStep(num: "3", text: "点链接 → Safari 打开 → 点「Open in HeadsUp」会跳回这里授权；或复制链接粘贴到上面")
+
+                    HelpStep(num: "1", text: "让你的 AI Agent（Hermes、Claude Code、OpenClaw、Codex 等）先读这个 URL 学协议：")
+
+                    HStack(spacing: 8) {
+                        Text(skillURL)
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1).truncationMode(.middle)
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 10).padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.gray.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        Button {
+                            UIPasteboard.general.string = skillURL
+                            copiedSkillURL = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedSkillURL = false }
+                        } label: {
+                            Label(copiedSkillURL ? "已复制" : "复制", systemImage: copiedSkillURL ? "checkmark" : "doc.on.doc")
+                                .font(.caption.weight(.medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                    .padding(.leading, 34)
+
+                    HelpStep(num: "2", text: "Agent 自己注册账号，并把 headsup:// 授权链接发给你")
+                    HelpStep(num: "3", text: "点链接 → Safari → 「Open in HeadsUp」会跳回这里授权；或粘贴到上面")
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)

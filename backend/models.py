@@ -72,6 +72,12 @@ class PushMessage(SQLModel, table=True):
     body: str
     subtitle: Optional[str] = None
     image_url: Optional[str] = None
+    level: Optional[str] = None
+    sound: Optional[str] = None
+    badge: Optional[int] = None
+    group: Optional[str] = None
+    url: Optional[str] = None
+    auto_copy: Optional[str] = None
     category_id: str
     data: Optional[str] = None  # JSON string
     status: str = Field(default="queued")  # queued | delivered | failed
@@ -155,6 +161,13 @@ class PushRequest(SQLModel):
     body: str
     subtitle: Optional[str] = None      # iOS native middle-line text
     image_url: Optional[str] = None     # remote image, attached by NSE
+    # Bark-style extras
+    level: Optional[str] = None         # passive | active | timeSensitive | critical
+    sound: Optional[str] = None         # custom sound name (must exist in app bundle)
+    badge: Optional[int] = None         # app icon badge count
+    group: Optional[str] = None         # notification thread identifier (groups related pushes)
+    url: Optional[str] = None           # tap notification body to open this URL
+    auto_copy: Optional[str] = None     # text auto-copied to clipboard on tap
     message_id: Optional[str] = None
     data: Optional[dict] = None
     ttl: int = 3600
@@ -167,6 +180,12 @@ class BroadcastRequest(SQLModel):
     body: str
     subtitle: Optional[str] = None
     image_url: Optional[str] = None
+    level: Optional[str] = None
+    sound: Optional[str] = None
+    badge: Optional[int] = None
+    group: Optional[str] = None
+    url: Optional[str] = None
+    auto_copy: Optional[str] = None
     message_id: Optional[str] = None
     data: Optional[dict] = None
     ttl: int = 3600

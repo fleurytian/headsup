@@ -111,6 +111,12 @@ async def send_push(
     ttl: int = 3600,
     subtitle: Optional[str] = None,
     image_url: Optional[str] = None,
+    level: Optional[str] = None,
+    sound: Optional[str] = None,
+    badge: Optional[int] = None,
+    group: Optional[str] = None,
+    url: Optional[str] = None,
+    auto_copy: Optional[str] = None,
 ) -> tuple[bool, str]:
     try:
         token = _get_apns_token()
@@ -138,8 +144,14 @@ async def send_push(
     aps: dict = {
         "alert": alert,
         "category": category_id,
-        "sound": "default",
+        "sound": (sound + ".caf") if (sound and sound != "default") else "default",
     }
+    if badge is not None:
+        aps["badge"] = badge
+    if group:
+        aps["thread-id"] = group
+    if level in {"passive", "active", "timeSensitive", "critical"}:
+        aps["interruption-level"] = level
     # Image attachment requires Notification Service Extension to download
     # the URL on-device. We set mutable-content=1 so iOS hands the payload
     # to the extension before showing the banner.
@@ -149,6 +161,10 @@ async def send_push(
     payload = {"aps": aps, "message_id": message_id}
     if image_url:
         payload["image_url"] = image_url
+    if url:
+        payload["url"] = url
+    if auto_copy:
+        payload["auto_copy"] = auto_copy
     if data:
         payload["data"] = data
 
