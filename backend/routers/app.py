@@ -50,14 +50,15 @@ def get_authed_user(
 router = APIRouter(prefix="/app", tags=["app"])
 
 BUTTON_LABELS = {
-    "confirm": "Confirm", "reject": "Reject",
-    "yes": "Yes", "no": "No",
-    "approve": "Approve", "cancel": "Cancel",
-    "option_a": "Option A", "option_b": "Option B",
-    "agree": "Agree", "decline": "Decline",
-    "remind_later": "Remind Later", "skip": "Skip",
-    "action": "Do it", "dismiss": "Dismiss",
-    "helpful": "Helpful", "not_helpful": "Not Helpful",
+    "confirm": "确认", "reject": "拒绝",
+    "yes": "是", "no": "否",
+    "approve": "批准", "cancel": "取消",
+    "option_a": "选项 A", "option_b": "选项 B",
+    "agree": "同意", "decline": "婉拒",
+    "remind_later": "稍后提醒", "skip": "跳过",
+    "action": "执行", "dismiss": "忽略",
+    "helpful": "有帮助", "not_helpful": "无帮助",
+    "later": "稍后再说",  # auto-appended to every category that has < 4 buttons
 }
 
 

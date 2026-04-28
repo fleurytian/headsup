@@ -86,9 +86,33 @@ final class PushService: NSObject, ObservableObject {
     // ── Category registration ────────────────────────────────────────────────
 
     private func registerAllCategories() {
-        var all: [UNNotificationCategory] = NotificationCategory.allCases.map { $0.uncategory }
+        var all: [UNNotificationCategory] = []
+
+        // info_only: notification with no buttons (for status/info messages)
+        all.append(UNNotificationCategory(
+            identifier: "info_only",
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        ))
+
+        // 8 built-in categories — each gets a "Later" action appended automatically
+        for cat in NotificationCategory.allCases {
+            var actions: [UNNotificationAction] = cat.builtInActions
+            if actions.count < 4 {
+                actions.append(Self.laterAction())
+            }
+            all.append(UNNotificationCategory(
+                identifier: cat.rawValue,
+                actions: actions,
+                intentIdentifiers: [],
+                options: []
+            ))
+        }
+
+        // Custom agent categories — also get Later if there's room
         for sc in serverCategories {
-            let actions = sc.buttons.map { btn -> UNNotificationAction in
+            var actions: [UNNotificationAction] = sc.buttons.map { btn -> UNNotificationAction in
                 var options: UNNotificationActionOptions = []
                 if btn.destructive { options.insert(.destructive) }
                 if let icon = btn.icon, !icon.isEmpty, #available(iOS 15.0, *) {
@@ -101,6 +125,9 @@ final class PushService: NSObject, ObservableObject {
                 }
                 return UNNotificationAction(identifier: btn.id, title: btn.label, options: options)
             }
+            if actions.count < 4 {
+                actions.append(Self.laterAction())
+            }
             all.append(UNNotificationCategory(
                 identifier: sc.ios_id,
                 actions: actions,
@@ -108,7 +135,20 @@ final class PushService: NSObject, ObservableObject {
                 options: []
             ))
         }
+
         UNUserNotificationCenter.current().setNotificationCategories(Set(all))
+    }
+
+    static func laterAction() -> UNNotificationAction {
+        if #available(iOS 15.0, *) {
+            return UNNotificationAction(
+                identifier: "later",
+                title: "稍后再说",
+                options: [],
+                icon: UNNotificationActionIcon(systemImageName: "clock.fill")
+            )
+        }
+        return UNNotificationAction(identifier: "later", title: "稍后再说", options: [])
     }
 }
 
@@ -122,8 +162,8 @@ enum NotificationCategory: String, CaseIterable {
     case actionDismiss = "action_dismiss"
     case feedback
 
-    var uncategory: UNNotificationCategory {
-        let actions = self.actions.map { entry -> UNNotificationAction in
+    var builtInActions: [UNNotificationAction] {
+        self.actions.map { entry -> UNNotificationAction in
             if let symbol = entry.icon, #available(iOS 15.0, *) {
                 return UNNotificationAction(
                     identifier: entry.id,
@@ -134,12 +174,6 @@ enum NotificationCategory: String, CaseIterable {
             }
             return UNNotificationAction(identifier: entry.id, title: entry.title, options: entry.options)
         }
-        return UNNotificationCategory(
-            identifier: self.rawValue,
-            actions: actions,
-            intentIdentifiers: [],
-            options: []
-        )
     }
 
     private typealias ActionEntry = (id: String, title: String, icon: String?, options: UNNotificationActionOptions)

@@ -36,3 +36,13 @@ api.include_router(web.router)
 @api.get("/health")
 def health():
     return {"status": "ok", "app": settings.app_name}
+
+
+@api.get("/skill.md", response_class=__import__("fastapi").responses.PlainTextResponse)
+def skill_md():
+    """Agent-facing protocol doc. Agents WebFetch this on startup to learn HeadsUp."""
+    from pathlib import Path
+    p = Path(__file__).parent.parent / "docs" / "skill.md"
+    if p.exists():
+        return p.read_text()
+    return "Skill doc not found."

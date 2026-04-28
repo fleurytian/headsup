@@ -38,6 +38,7 @@ BUILTIN_CATEGORIES = {
     "remind_later_skip",
     "action_dismiss",
     "feedback",
+    "info_only",   # notification-only (no buttons) — agent doesn't need a response
 }
 
 

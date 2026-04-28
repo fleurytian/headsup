@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var bindings: [AgentBinding] = []
     @State private var loading = false
     @State private var error: String?
+    @State private var showAddAgent = false
 
     var body: some View {
         NavigationStack {
@@ -36,6 +37,11 @@ struct HomeView: View {
             }
             .navigationTitle("HeadsUp")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { showAddAgent = true } label: {
+                        Image(systemName: "plus.circle.fill").font(.title2)
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink {
                         SettingsView()
@@ -52,6 +58,9 @@ struct HomeView: View {
             }
             .onChange(of: deepLink.pendingAuthorize?.id) { _ in
                 Task { await loadBindings() }
+            }
+            .sheet(isPresented: $showAddAgent) {
+                AddAgentView()
             }
         }
     }

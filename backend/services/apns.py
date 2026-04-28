@@ -125,7 +125,11 @@ async def send_push(
     if subtitle:
         subtitle = strip_markdown(subtitle)
 
-    body_with_hint = body if HINT_SUFFIX in body else body + HINT_SUFFIX
+    # info_only category has no buttons — don't tell users to long-press for nothing.
+    if category_id == "info_only":
+        body_with_hint = body
+    else:
+        body_with_hint = body if HINT_SUFFIX in body else body + HINT_SUFFIX
 
     alert: dict = {"title": title, "body": body_with_hint}
     if subtitle:
