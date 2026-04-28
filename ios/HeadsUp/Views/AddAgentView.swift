@@ -60,9 +60,9 @@ struct AddAgentView: View {
                 // How-to guide
                 VStack(alignment: .leading, spacing: 12) {
                     Text("怎么获得授权链接？").font(.subheadline.weight(.medium))
-                    HelpStep(num: "1", text: "你的 AI Agent（Hermes、Claude Code、ChatGPT 等）会在对话中给你一个 headsup:// 开头的链接")
-                    HelpStep(num: "2", text: "点链接 → Safari 打开 → 点「Open in HeadsUp」就会跳到这里授权")
-                    HelpStep(num: "3", text: "或者复制链接粘贴到上面的输入框")
+                    HelpStep(num: "1", text: "让你的 AI Agent（Hermes、Claude Code、OpenClaw、Codex 等）先读 https://headsup.md/skill.md 学一下协议")
+                    HelpStep(num: "2", text: "Agent 会自己注册账号，并把它的 headsup:// 授权链接发给你")
+                    HelpStep(num: "3", text: "点链接 → Safari 打开 → 点「Open in HeadsUp」会跳回这里授权；或复制链接粘贴到上面")
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
