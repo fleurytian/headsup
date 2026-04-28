@@ -9,64 +9,41 @@ struct OnboardingView: View {
         ZStack {
             HU.C.bg.ignoresSafeArea()
 
-            // Top decorative gradient sun + grid feel
-            VStack(spacing: 0) {
-                ZStack(alignment: .center) {
-                    // sun
-                    Circle()
-                        .fill(HU.sunsetGradient)
-                        .frame(width: 220, height: 220)
-                        .blur(radius: 0.5)
-                        .opacity(0.85)
-                    // wireframe grid behind sun
-                    GeometryReader { geo in
-                        Path { p in
-                            let count = 6
-                            for i in 0...count {
-                                let y = geo.size.height * CGFloat(i) / CGFloat(count)
-                                p.move(to: .init(x: 0, y: y))
-                                p.addLine(to: .init(x: geo.size.width, y: y))
-                            }
-                        }
-                        .stroke(HU.C.lavender.opacity(0.25), style: StrokeStyle(lineWidth: 0.6, dash: [3, 3]))
-                    }
-                    .frame(height: 220)
-                    .mask(
-                        LinearGradient(colors: [.clear, .black, .clear],
-                                       startPoint: .leading, endPoint: .trailing)
-                    )
-                }
-                .frame(height: 280)
-                Spacer()
-            }
-            .ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 0) {
+                Spacer().frame(height: 60)
 
-            VStack(spacing: 28) {
-                Spacer().frame(height: 200)
+                // top eyebrow
+                Eyebrow(text: "headsup · md")
+                    .padding(.horizontal, 32)
 
-                // Wordmark — wide tracking, retro feel
-                VStack(spacing: 6) {
-                    Text("H E A D S U P")
-                        .font(HU.rounded(34, weight: .heavy))
-                        .tracking(8)
+                Spacer().frame(height: 14)
+
+                // single sun mark, very small, accent only
+                Circle()
+                    .fill(HU.C.accent)
+                    .frame(width: 18, height: 18)
+                    .padding(.horizontal, 32)
+
+                Spacer().frame(height: 30)
+
+                // headline — large, generous letter spacing
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("一个让 AI\n来通知栏找你的\n小工具。")
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
                         .foregroundStyle(HU.C.ink)
-                    Text("\(HU.diamond)  AGENT × HUMAN  \(HU.diamond)")
-                        .font(HU.mono(11, weight: .medium))
-                        .tracking(3)
-                        .foregroundStyle(HU.C.lavender)
+                        .lineSpacing(6)
+                    Text("Yes / no / wait — without opening a thing.")
+                        .font(HU.body())
+                        .italic()
+                        .foregroundStyle(HU.C.muted)
                 }
-
-                Text("让你的 AI 能在通知栏跟你说话\nSay yes / no — without opening anything.")
-                    .font(HU.rounded(15, weight: .regular))
-                    .foregroundStyle(HU.C.muted)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .padding(.horizontal, 36)
+                .padding(.horizontal, 32)
 
                 Spacer()
 
-                VStack(spacing: 14) {
-                    // Sign in with Apple — keep system component, wrap in retro frame
+                // sign-in section, anchored bottom
+                VStack(alignment: .leading, spacing: 14) {
+                    HairRule(label: "begin")
                     SignInWithAppleButton(.signIn) { request in
                         request.requestedScopes = [.fullName, .email]
                     } onCompletion: { result in
@@ -85,26 +62,20 @@ struct OnboardingView: View {
                         }
                     }
                     .signInWithAppleButtonStyle(.black)
-                    .frame(height: 52)
+                    .frame(height: 50)
                     .clipShape(Capsule())
-                    .padding(.horizontal, 32)
 
                     if let err = auth.lastError {
-                        Text(err)
-                            .font(HU.mono(11))
-                            .foregroundStyle(HU.C.pink)
-                            .padding(.horizontal, 32)
+                        Text(err).font(HU.small()).foregroundStyle(HU.C.accent)
                     }
-                }
 
-                Text("By continuing you accept interactive notifications\nfrom agents you authorize.")
-                    .font(HU.mono(10))
-                    .tracking(0.5)
-                    .foregroundStyle(HU.C.muted.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(2)
-                    .padding(.horizontal, 36)
-                    .padding(.bottom, 24)
+                    Text("继续即同意接收你授权的 agent 发送的交互通知。")
+                        .font(HU.small())
+                        .foregroundStyle(HU.C.muted)
+                        .lineSpacing(2)
+                }
+                .padding(.horizontal, 32)
+                .padding(.bottom, 40)
             }
         }
     }

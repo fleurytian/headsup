@@ -23,72 +23,102 @@ struct AgentDetailView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var revoking = false
-    @State private var revoked = false
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(binding.agentName).font(.title3.bold())
-                    Text("授权于 \(binding.boundAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
+        ZStack {
+            HU.C.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        Eyebrow(text: "agent")
+                        Text(binding.agentName)
+                            .font(HU.display())
+                            .foregroundStyle(HU.C.ink)
+                        Text("授权于 \(binding.boundAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(HU.small())
+                            .foregroundStyle(HU.C.muted)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 4)
 
-            Section("最近推送 (\(history.count))") {
-                if loading && history.isEmpty {
-                    ProgressView().frame(maxWidth: .infinity)
-                } else if history.isEmpty {
-                    Text("还没收到这个 agent 的推送").font(.callout).foregroundStyle(.secondary)
-                } else {
-                    ForEach(history) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(item.title).font(.body.weight(.medium))
-                            Text(item.body).font(.callout).foregroundStyle(.secondary).lineLimit(3)
-                            HStack(spacing: 8) {
-                                Text(item.sent_at.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption2).foregroundStyle(.tertiary)
-                                if let label = item.button_label {
-                                    Spacer()
-                                    Label(label, systemImage: "checkmark.circle.fill")
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(.tint)
-                                } else {
-                                    Spacer()
-                                    Text("未响应").font(.caption2).foregroundStyle(.tertiary)
+                    // Stats row
+                    HStack(spacing: 16) {
+                        StatBox(value: "\(history.count)", label: "messages")
+                        StatBox(value: "\(history.filter { $0.button_id != nil }.count)", label: "responded")
+                    }
+                    .padding(.horizontal, 24)
+
+                    // History
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Eyebrow(text: "history")
+                            Spacer()
+                        }
+                        .padding(.horizontal, 24)
+
+                        if loading && history.isEmpty {
+                            ProgressView().frame(maxWidth: .infinity).tint(HU.C.muted)
+                                .padding(.vertical, 40)
+                        } else if history.isEmpty {
+                            Text("还没收到这个 agent 的推送。")
+                                .font(HU.body()).foregroundStyle(HU.C.muted)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 24)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(Array(history.enumerated()), id: \.element.id) { idx, item in
+                                    HistoryRow(item: item)
+                                    if idx < history.count - 1 {
+                                        Rectangle().fill(HU.C.line).frame(height: 1)
+                                            .padding(.leading, 16)
+                                    }
                                 }
                             }
+                            .card()
+                            .padding(.horizontal, 16)
                         }
-                        .padding(.vertical, 4)
                     }
-                }
-            }
 
-            Section {
-                Button(role: .destructive) {
-                    Task { await revoke() }
-                } label: {
-                    if revoking {
-                        ProgressView()
-                    } else {
-                        Label("撤销 agent 授权", systemImage: "xmark.circle.fill")
+                    // Revoke
+                    Button(role: .destructive) {
+                        Task { await revoke() }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if revoking {
+                                ProgressView().tint(HU.C.accent)
+                            } else {
+                                Text("撤销 agent 授权")
+                                    .font(HU.body(.medium)).foregroundStyle(HU.C.accent)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 14)
+                        .background(Capsule().strokeBorder(HU.C.accent, lineWidth: 1))
                     }
-                }
-                .disabled(revoking)
-            } footer: {
-                Text("撤销后，这个 agent 不能再给你发推送，需要重新授权。")
-            }
+                    .disabled(revoking)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
 
-            if let error = error {
-                Section {
-                    Text(error).foregroundStyle(.red).font(.caption)
+                    Text("撤销后，这个 agent 不能再给你发推送，需要重新授权。")
+                        .font(HU.small())
+                        .foregroundStyle(HU.C.muted)
+                        .padding(.horizontal, 24)
+
+                    if let error = error {
+                        Text(error).font(HU.small()).foregroundStyle(HU.C.accent)
+                            .padding(.horizontal, 24)
+                    }
+
+                    Spacer().frame(height: 40)
                 }
+                .padding(.vertical, 12)
             }
         }
-        .navigationTitle(binding.agentName)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("")
+        .toolbarBackground(HU.C.bg, for: .navigationBar)
         .refreshable { await loadHistory() }
         .task { await loadHistory() }
     }
@@ -117,10 +147,55 @@ struct AgentDetailView: View {
                 "/v1/app/bindings/\(binding.agentId)",
                 sessionToken: session.sessionToken
             )
-            revoked = true
             dismiss()
         } catch {
             self.error = error.localizedDescription
         }
+    }
+}
+
+struct HistoryRow: View {
+    let item: HistoryItem
+    var showAgentName: Bool = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if showAgentName {
+                Text(item.agent_name).font(HU.eyebrow()).tracking(1.5).foregroundStyle(HU.C.accent)
+            }
+            Text(item.title).font(HU.body(.semibold)).foregroundStyle(HU.C.ink)
+            Text(item.body).font(HU.small()).foregroundStyle(HU.C.muted)
+                .lineSpacing(2).lineLimit(3)
+            HStack(spacing: 6) {
+                Text(item.sent_at.formatted(date: .abbreviated, time: .shortened))
+                    .font(HU.small()).foregroundStyle(HU.C.muted.opacity(0.7))
+                Spacer()
+                if let label = item.button_label {
+                    Text("→ \(label)")
+                        .font(HU.small(.semibold))
+                        .foregroundStyle(HU.C.accent)
+                } else {
+                    Text("未响应")
+                        .font(HU.small())
+                        .foregroundStyle(HU.C.muted.opacity(0.7))
+                }
+            }
+            .padding(.top, 2)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct StatBox: View {
+    let value: String
+    let label: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value).font(HU.display()).foregroundStyle(HU.C.ink)
+            Text(label).font(HU.eyebrow()).tracking(2).foregroundStyle(HU.C.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .card()
     }
 }
