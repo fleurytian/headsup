@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 @MainActor
 final class DeepLinkHandler: ObservableObject {
@@ -26,11 +27,10 @@ final class DeepLinkHandler: ObservableObject {
     }
 
     /// On launch, check if Safari left a pending headsup:// URL on the clipboard.
-    /// Used for "deferred deep link" — user tapped invite link → installed app → opened it
+    /// "Deferred deep link" — user tapped invite link → installed app → opened it
     /// → we resume the authorization automatically.
     func consumeClipboardIfPresent() {
         let pb = UIPasteboard.general
-        // hasURLs / hasStrings let us check without iOS surfacing the "X pasted from..." banner
         guard pb.hasStrings || pb.hasURLs else { return }
         var candidate: String?
         if let url = pb.url, url.scheme == "headsup" {
@@ -40,12 +40,8 @@ final class DeepLinkHandler: ObservableObject {
         }
         if let c = candidate, let url = URL(string: c) {
             handle(url: url)
-            // Don't clear the clipboard — user might want to paste something else.
         }
     }
-}
-
-import UIKit
 
     /// Confirm the binding with the backend.
     func confirm(_ pending: PendingAuthorize) async throws {

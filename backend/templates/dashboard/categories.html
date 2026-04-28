@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Categories — HeadsUp{% endblock %}
+{% block body %}
+{% include "dashboard/nav.html" %}
+<div class="max-w-4xl mx-auto px-6 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">Custom Categories</h1>
+    <p class="text-sm text-gray-500">Synced to user phones automatically</p>
+  </div>
+
+  {% if saved %}
+  <div class="bg-green-50 text-green-700 text-sm rounded-lg px-4 py-3 mb-4">{{ saved }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="bg-red-50 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">{{ error }}</div>
+  {% endif %}
+
+  <!-- Existing categories -->
+  {% if categories %}
+  <div class="space-y-3 mb-8">
+    {% for c in categories %}
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex items-start justify-between">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <code class="text-sm font-mono bg-gray-100 px-2 py-0.5 rounded">{{ c.name }}</code>
+            <span class="text-xs text-gray-400">{{ c.buttons|length }} button{% if c.buttons|length > 1 %}s{% endif %}</span>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-2">
+            {% for b in c.buttons %}
+            <span class="inline-flex items-center gap-1 text-sm px-3 py-1 rounded-full
+              {% if b.destructive %}bg-red-50 text-red-700 border border-red-100{% else %}bg-blue-50 text-blue-700 border border-blue-100{% endif %}">
+              {% if b.icon %}<span class="text-xs text-gray-500">{{ b.icon }}</span>{% endif %}
+              {{ b.label }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        <form method="post" action="/dashboard/categories/{{ c.name }}/delete" onsubmit="return confirm('Delete category {{ c.name }}?')">
+          <button type="submit" class="text-red-500 hover:text-red-700 text-xs ml-3">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Create new category -->
+  <div class="bg-white rounded-xl border border-gray-200 p-6">
+    <h2 class="font-semibold mb-1">New Category</h2>
+    <p class="text-sm text-gray-500 mb-4">Up to 4 buttons per category. Built-in 8 categories don't need to be redefined.</p>
+    <form method="post" action="/dashboard/categories" class="space-y-4" id="cat-form">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Name (snake_case, agent uses this in API)</label>
+        <input type="text" name="name" required pattern="[a-z][a-z0-9_]*" minlength="2" maxlength="32"
+          placeholder="e.g. pay_or_wait"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+
+      <div id="buttons-container" class="space-y-2">
+        <!-- buttons rendered by JS -->
+      </div>
+
+      <div class="flex gap-2">
+        <button type="button" onclick="addButton()" class="text-sm text-blue-600 hover:underline">+ Add button</button>
+        <button type="submit"
+          class="ml-auto bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+          Create
+        </button>
+      </div>
+    </form>
+
+    <details class="mt-4 text-xs text-gray-500">
+      <summary class="cursor-pointer">Icon hints (SF Symbols)</summary>
+      <div class="mt-2 grid grid-cols-2 gap-1 font-mono">
+        <span>checkmark.circle.fill</span><span>xmark.circle.fill</span>
+        <span>hand.thumbsup.fill</span><span>hand.thumbsdown.fill</span>
+        <span>clock.fill</span><span>bell.badge</span>
+        <span>bolt.fill</span><span>forward.fill</span>
+        <span>a.circle.fill</span><span>b.circle.fill</span>
+      </div>
+      <p class="mt-2">Browse all at <a href="https://developer.apple.com/sf-symbols/" target="_blank" class="text-blue-600 underline">SF Symbols</a></p>
+    </details>
+  </div>
+</div>
+
+<script>
+let buttonIdx = 0;
+function addButton() {
+  if (buttonIdx >= 4) return;
+  const i = buttonIdx++;
+  const html = `
+    <div class="flex gap-2 items-start" id="btn-${i}">
+      <input name="btn_id_${i}" required pattern="[a-z][a-z0-9_]*" placeholder="id (e.g. pay)"
+        class="w-32 border border-gray-300 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
+      <input name="btn_label_${i}" required maxlength="20" placeholder="label (e.g. 立即支付)"
+        class="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+      <input name="btn_icon_${i}" placeholder="SF Symbol (optional)"
+        class="w-44 border border-gray-300 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
+      <label class="flex items-center gap-1 text-xs text-gray-600 mt-1">
+        <input type="checkbox" name="btn_destructive_${i}"> destructive
+      </label>
+      <button type="button" onclick="document.getElementById('btn-${i}').remove()" class="text-red-500 text-xs mt-1.5">×</button>
+    </div>`;
+  document.getElementById('buttons-container').insertAdjacentHTML('beforeend', html);
+}
+addButton(); addButton();  // start with 2 buttons
+</script>
+{% endblock %}

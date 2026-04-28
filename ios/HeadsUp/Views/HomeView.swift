@@ -14,19 +14,18 @@ struct HomeView: View {
                     EmptyAgentsView()
                 } else {
                     List {
-                        Section("Authorized Agents") {
+                        Section("已授权的 Agent") {
                             ForEach(bindings) { agent in
-                                HStack {
+                                NavigationLink(destination: AgentDetailView(binding: agent)) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(agent.agentName).font(.body)
-                                        Text("Bound \(agent.boundAt.formatted(date: .abbreviated, time: .shortened))")
+                                        Text("授权于 \(agent.boundAt.formatted(date: .abbreviated, time: .shortened))")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
-                                    Spacer()
                                 }
                                 .swipeActions(edge: .trailing) {
-                                    Button("Revoke", role: .destructive) {
+                                    Button("撤销", role: .destructive) {
                                         Task { await revoke(agent) }
                                     }
                                 }

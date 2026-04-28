@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from typing import Optional
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -240,12 +240,16 @@ def dashboard_settings(request: Request, session: Session = Depends(get_session)
 def dashboard_settings_post(
     request: Request,
     webhook_url: str = Form(default=""),
+    description: str = Form(default=""),
+    logo_url: str = Form(default=""),
     session: Session = Depends(get_session),
 ):
     agent = _get_dashboard_agent(request, session)
     if not agent:
         return RedirectResponse("/dashboard/login")
     agent.webhook_url = webhook_url or None
+    agent.description = description or None
+    agent.logo_url = logo_url or None
     session.add(agent)
     session.commit()
     return templates.TemplateResponse("dashboard/settings.html", {
@@ -261,3 +265,111 @@ def dashboard_logout():
     resp = RedirectResponse("/dashboard/login", status_code=303)
     resp.delete_cookie("dashboard_token")
     return resp
+
+
+# ── Custom categories management ─────────────────────────────────────────────
+
+@router.get("/dashboard/categories", response_class=HTMLResponse)
+def dashboard_categories(request: Request, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+    from models import Category
+    import json as _json
+    cats_raw = session.exec(
+        select(Category).where(Category.agent_id == agent.id).order_by(Category.created_at.desc())
+    ).all()
+    cats = [
+        {
+            "name": c.name,
+            "ios_id": c.ios_id,
+            "buttons": _json.loads(c.buttons),
+        }
+        for c in cats_raw
+    ]
+    return templates.TemplateResponse("dashboard/categories.html", {
+        "request": request,
+        "agent": agent,
+        "categories": cats,
+    })
+
+
+@router.post("/dashboard/categories", response_class=HTMLResponse)
+async def dashboard_categories_post(request: Request, background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+
+    from routers.categories import _ios_id, _validate_buttons, NAME_RE, RESERVED_NAMES, _notify_users_of_category_change
+    from models import Category, CategoryButton
+    import json as _json
+
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    buttons: list[CategoryButton] = []
+    for i in range(4):
+        bid = form.get(f"btn_id_{i}")
+        if not bid:
+            continue
+        buttons.append(CategoryButton(
+            id=bid.strip(),
+            label=(form.get(f"btn_label_{i}") or "").strip(),
+            icon=(form.get(f"btn_icon_{i}") or "").strip() or None,
+            destructive=form.get(f"btn_destructive_{i}") in ("on", "true", "1"),
+        ))
+
+    error = None
+    saved = None
+    try:
+        if not NAME_RE.match(name):
+            raise HTTPException(status_code=400, detail="Name must be lowercase snake_case 2–32 chars")
+        if name in RESERVED_NAMES:
+            raise HTTPException(status_code=400, detail=f"'{name}' is built-in")
+        existing = session.exec(
+            select(Category).where(Category.agent_id == agent.id, Category.name == name)
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Category with that name already exists")
+        _validate_buttons(buttons)
+        cat = Category(
+            agent_id=agent.id, name=name, ios_id=_ios_id(agent.id, name),
+            buttons=_json.dumps([b.model_dump() for b in buttons]),
+        )
+        session.add(cat); session.commit()
+        background_tasks.add_task(_notify_users_of_category_change, agent.id)
+        saved = f"Created '{name}'. Pushing the new template to your users' phones."
+    except HTTPException as e:
+        error = e.detail if isinstance(e.detail, str) else str(e.detail)
+
+    cats_raw = session.exec(
+        select(Category).where(Category.agent_id == agent.id).order_by(Category.created_at.desc())
+    ).all()
+    return templates.TemplateResponse("dashboard/categories.html", {
+        "request": request, "agent": agent,
+        "categories": [{"name": c.name, "ios_id": c.ios_id, "buttons": _json.loads(c.buttons)} for c in cats_raw],
+        "saved": saved, "error": error,
+    })
+
+
+@router.get("/dashboard/debug", response_class=HTMLResponse)
+def dashboard_debug(request: Request, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+    return templates.TemplateResponse("dashboard/debug.html", {
+        "request": request, "agent": agent,
+    })
+
+
+@router.post("/dashboard/categories/{name}/delete")
+def dashboard_categories_delete(name: str, request: Request, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+    from models import Category
+    cat = session.exec(
+        select(Category).where(Category.agent_id == agent.id, Category.name == name)
+    ).first()
+    if cat:
+        session.delete(cat); session.commit()
+    return RedirectResponse("/dashboard/categories", status_code=303)

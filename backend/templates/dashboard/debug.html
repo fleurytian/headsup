@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Debug — HeadsUp{% endblock %}
+{% block body %}
+{% include "dashboard/nav.html" %}
+<div class="max-w-5xl mx-auto px-6 py-8">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">Live Debug</h1>
+    <div class="flex items-center gap-2">
+      <span id="status" class="text-xs text-gray-500">connecting...</span>
+      <button id="pauseBtn" onclick="togglePause()" class="text-xs bg-gray-100 px-3 py-1 rounded">Pause</button>
+      <button onclick="clearLog()" class="text-xs bg-gray-100 px-3 py-1 rounded">Clear</button>
+    </div>
+  </div>
+
+  <p class="text-sm text-gray-500 mb-4">Auto-refreshing every 2 seconds. Latest pushes you sent + the user responses (button taps).</p>
+
+  <div class="grid grid-cols-2 gap-4">
+    <!-- Pushes column -->
+    <div>
+      <h2 class="text-sm font-semibold mb-2 text-gray-700">📤 Recent Pushes</h2>
+      <div id="pushes" class="space-y-2"></div>
+    </div>
+    <!-- Responses column -->
+    <div>
+      <h2 class="text-sm font-semibold mb-2 text-gray-700">📬 Recent Responses</h2>
+      <div id="responses" class="space-y-2"></div>
+    </div>
+  </div>
+</div>
+
+<template id="push-card">
+  <div class="bg-white rounded-lg border border-gray-200 p-3 text-xs">
+    <div class="flex items-center justify-between">
+      <span class="font-mono text-gray-400 _id"></span>
+      <span class="_status"></span>
+    </div>
+    <div class="font-medium text-gray-900 mt-1 _title"></div>
+    <div class="text-gray-600 _body"></div>
+    <div class="text-gray-400 mt-1 _meta"></div>
+  </div>
+</template>
+
+<template id="response-card">
+  <div class="bg-blue-50 rounded-lg border border-blue-200 p-3 text-xs">
+    <div class="flex items-center justify-between">
+      <span class="font-mono text-blue-700 _btn"></span>
+      <span class="text-gray-400 _at"></span>
+    </div>
+    <div class="text-gray-700 mt-0.5 _label"></div>
+    <div class="text-gray-400 _meta"></div>
+  </div>
+</template>
+
+<script>
+const apiKey = "{{ agent.api_key }}";
+const seenPushes = new Set();
+const seenResponses = new Set();
+let paused = false;
+let timer;
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+  document.getElementById('status').textContent = paused ? 'paused' : 'live';
+  if (!paused) tick();
+}
+
+function clearLog() {
+  seenPushes.clear(); seenResponses.clear();
+  document.getElementById('pushes').innerHTML = '';
+  document.getElementById('responses').innerHTML = '';
+}
+
+async function tick() {
+  if (paused) return;
+  document.getElementById('status').textContent = 'live';
+  try {
+    const [pushes, responses] = await Promise.all([
+      fetch('/v1/messages?page_size=15', {headers: {'X-API-Key': apiKey}}).then(r => r.json()),
+      fetch('/v1/responses?limit=15', {headers: {'X-API-Key': apiKey}}).then(r => r.json()),
+    ]);
+    renderPushes(pushes);
+    renderResponses(responses);
+  } catch (e) {
+    document.getElementById('status').textContent = 'error: ' + e.message;
+  }
+}
+
+function renderPushes(items) {
+  const container = document.getElementById('pushes');
+  for (const m of items) {
+    if (seenPushes.has(m.id)) continue;
+    seenPushes.add(m.id);
+    const tpl = document.getElementById('push-card').content.cloneNode(true);
+    tpl.querySelector('._id').textContent = m.id.slice(0,8);
+    tpl.querySelector('._title').textContent = m.title;
+    tpl.querySelector('._body').textContent = m.body.slice(0, 80);
+    tpl.querySelector('._meta').textContent = `${m.user_key.slice(0,12)}…  ·  ${m.category_id}  ·  ${new Date(m.created_at).toLocaleTimeString()}`;
+    const status = tpl.querySelector('._status');
+    status.textContent = m.status;
+    status.className = '_status px-1.5 py-0.5 rounded text-[10px] ' +
+      (m.status === 'delivered' ? 'bg-green-100 text-green-700' :
+       m.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600');
+    container.prepend(tpl);
+  }
+  // Trim to last 30
+  while (container.children.length > 30) container.lastElementChild.remove();
+}
+
+function renderResponses(items) {
+  const container = document.getElementById('responses');
+  for (const r of items) {
+    const key = r.message_id + ':' + r.button_id + ':' + r.created_at;
+    if (seenResponses.has(key)) continue;
+    seenResponses.add(key);
+    const tpl = document.getElementById('response-card').content.cloneNode(true);
+    tpl.querySelector('._btn').textContent = '→ ' + r.button_id;
+    tpl.querySelector('._label').textContent = r.button_label;
+    tpl.querySelector('._at').textContent = new Date(r.created_at).toLocaleTimeString();
+    tpl.querySelector('._meta').textContent = `${r.user_key.slice(0,12)}…  ·  msg ${r.message_id.slice(0,8)}`;
+    container.prepend(tpl);
+  }
+  while (container.children.length > 30) container.lastElementChild.remove();
+}
+
+tick();
+timer = setInterval(tick, 2000);
+</script>
+{% endblock %}

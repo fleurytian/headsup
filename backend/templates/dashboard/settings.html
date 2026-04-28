@@ -38,18 +38,45 @@
     </div>
   </div>
 
-  <div class="bg-white rounded-xl border border-gray-200 p-6">
-    <h2 class="font-semibold mb-4">Webhook URL</h2>
-    <p class="text-sm text-gray-500 mb-3">We POST button-click results to this URL.</p>
-    <form method="post" action="/dashboard/settings" class="space-y-4">
-      <input type="url" name="webhook_url" value="{{ agent.webhook_url or '' }}"
-        placeholder="https://your-server.com/webhook"
-        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+  <div class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+    <h2 class="font-semibold mb-4">Public Profile</h2>
+    <p class="text-sm text-gray-500 mb-3">Shown to users on the authorize page.</p>
+    <form method="post" action="/dashboard/settings" class="space-y-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Description</label>
+        <textarea name="description" rows="3" maxlength="280"
+          placeholder="Describe what this agent does and what kind of pushes it sends."
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">{{ agent.description or '' }}</textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Logo URL <span class="text-gray-400">(optional)</span></label>
+        <input type="url" name="logo_url" value="{{ agent.logo_url or '' }}"
+          placeholder="https://..."
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Webhook URL</label>
+        <input type="url" name="webhook_url" value="{{ agent.webhook_url or '' }}"
+          placeholder="https://your-server.com/webhook"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p class="text-xs text-gray-400 mt-1">Local agents that can't host a webhook should poll <code>GET /v1/responses</code> instead.</p>
+      </div>
       <button type="submit"
         class="bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 transition">
         Save
       </button>
     </form>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="font-semibold">Custom Categories</h2>
+        <p class="text-sm text-gray-500">Custom button templates synced live to all your bound users' iPhones.</p>
+      </div>
+      <a href="/dashboard/categories" class="text-sm bg-gray-900 text-white font-medium px-4 py-2 rounded-lg hover:bg-black">Manage</a>
+    </div>
+    <p class="text-xs text-gray-400">Built-in categories: <code>confirm_reject yes_no approve_cancel choose_a_b agree_decline remind_later_skip action_dismiss feedback</code></p>
   </div>
 </div>
 {% endblock %}
