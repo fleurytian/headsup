@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 struct AgentPublic: Codable {
     let id: String
@@ -18,119 +19,117 @@ struct AuthorizeView: View {
     @State private var done = false
 
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer().frame(height: 24)
+        ZStack {
+            HU.C.bg.ignoresSafeArea()
 
-            // Avatar / icon
-            Group {
-                if done {
+            ScrollView {
+                VStack(spacing: 22) {
+                    Spacer().frame(height: 8)
+
+                    // Avatar / icon
                     ZStack {
-                        Circle().fill(.tint.opacity(0.15)).frame(width: 80, height: 80)
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 36))
-                            .foregroundStyle(.tint)
-                    }
-                } else if let url = agentInfo?.logo_url, let imgURL = URL(string: url) {
-                    AsyncImage(url: imgURL) { phase in
-                        switch phase {
-                        case .success(let img): img.resizable().aspectRatio(contentMode: .fill)
-                        default:
-                            ZStack { Circle().fill(.tint.opacity(0.15))
-                                Image(systemName: "bell.badge.fill").font(.system(size: 32)).foregroundStyle(.tint) }
-                        }
-                    }
-                    .frame(width: 80, height: 80)
-                    .clipShape(Circle())
-                } else {
-                    ZStack {
-                        Circle().fill(.tint.opacity(0.15)).frame(width: 80, height: 80)
-                        Image(systemName: "bell.badge.fill").font(.system(size: 36)).foregroundStyle(.tint)
-                    }
-                }
-            }
-
-            VStack(spacing: 6) {
-                Text(done ? "已连接" : (agentInfo?.name ?? (loadingInfo ? "加载中…" : "Agent")))
-                    .font(.title2.bold())
-                if !done {
-                    Text(done ? "" : "想给你发交互式推送通知")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !done, let desc = agentInfo?.description, !desc.isEmpty {
-                Text(desc)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 8)
-            }
-
-            if !done {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text("可以给你发带按钮的通知")
-                    }
-                    HStack(spacing: 10) {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text("你的回应只会发回这个 Agent")
-                    }
-                    HStack(spacing: 10) {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.gray.opacity(0.5))
-                        Text("看不到你的消息或其他 App")
-                    }
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.uturn.backward.circle.fill").foregroundStyle(.gray.opacity(0.5))
-                        Text("随时可在主页左滑撤销授权")
-                    }
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 10)
-            }
-
-            Spacer()
-
-            if !done {
-                VStack(spacing: 12) {
-                    Button {
-                        Task { await confirm() }
-                    } label: {
-                        if working {
-                            ProgressView().tint(.white)
+                        Circle().fill(HU.pastelGradient.opacity(done ? 0.85 : 0.4))
+                            .frame(width: 100, height: 100)
+                        if done {
+                            Image(systemName: "checkmark").font(.system(size: 40, weight: .bold))
+                                .foregroundStyle(.white)
+                        } else if let url = agentInfo?.logo_url, let imgURL = URL(string: url) {
+                            AsyncImage(url: imgURL) { phase in
+                                switch phase {
+                                case .success(let img): img.resizable().aspectRatio(contentMode: .fill)
+                                default: Text("✦").font(.system(size: 36)).foregroundStyle(.white)
+                                }
+                            }
+                            .frame(width: 86, height: 86).clipShape(Circle())
                         } else {
-                            Text("授权").font(.headline).frame(maxWidth: .infinity)
+                            Text(HU.star).font(.system(size: 40)).foregroundStyle(.white)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(working)
 
-                    Button("取消") { deepLink.cancel() }
+                    VStack(spacing: 6) {
+                        Text(done ? "CONNECTED" : (agentInfo?.name ?? (loadingInfo ? "..." : "AGENT")))
+                            .font(HU.rounded(22, weight: .heavy)).tracking(done ? 6 : 1)
+                            .foregroundStyle(HU.C.ink)
+                        if !done {
+                            Text("\(HU.diamond)  REQUESTS  ACCESS  \(HU.diamond)")
+                                .font(HU.mono(10, weight: .medium)).tracking(3)
+                                .foregroundStyle(HU.C.lavender)
+                        }
+                    }
+
+                    if !done, let desc = agentInfo?.description, !desc.isEmpty {
+                        Text(desc)
+                            .font(HU.rounded(13))
+                            .foregroundStyle(HU.C.muted)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(3)
+                            .padding(.horizontal, 28)
+                    }
+
+                    if !done {
+                        VStack(alignment: .leading, spacing: 12) {
+                            permissionRow(icon: "checkmark.circle.fill", color: HU.C.mint,
+                                text: "可以给你发带按钮的通知")
+                            permissionRow(icon: "checkmark.circle.fill", color: HU.C.mint,
+                                text: "你的回应只发回这个 Agent")
+                            permissionRow(icon: "xmark.circle.fill", color: HU.C.muted.opacity(0.5),
+                                text: "看不到你的消息或其他 App")
+                            permissionRow(icon: "arrow.uturn.backward.circle.fill", color: HU.C.muted.opacity(0.5),
+                                text: "随时可在主页左滑撤销")
+                        }
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .vaporCard()
+                        .padding(.horizontal, 20)
+                    } else {
+                        Text("you're set\n通知准时送达")
+                            .font(HU.rounded(13))
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(4)
+                            .foregroundStyle(HU.C.muted)
+                            .padding(.top, 8)
+                    }
+
+                    if let error = error {
+                        Text(error).font(HU.mono(11)).foregroundStyle(HU.C.pink)
+                            .padding(.horizontal, 32)
+                    }
+
+                    Spacer().frame(height: 8)
+
+                    if !done {
+                        VaporButton(title: working ? "" : "授权",
+                                    icon: working ? nil : "sparkles",
+                                    primary: true) {
+                            Task { await confirm() }
+                        }
                         .disabled(working)
-                }
-                .padding(.horizontal, 32)
-            } else {
-                Button { deepLink.cancel() } label: {
-                    Text("完成").font(.headline).frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.horizontal, 32)
-            }
+                        .overlay { if working { ProgressView().tint(.white) } }
+                        .padding(.horizontal, 28)
 
-            if let error = error {
-                Text(error).font(.caption).foregroundStyle(.red)
-                    .padding(.horizontal, 32)
-            }
+                        VaporButton(title: "取消", primary: false) { deepLink.cancel() }
+                            .disabled(working)
+                            .padding(.horizontal, 28)
+                    } else {
+                        VaporButton(title: "完成", icon: "heart.fill", primary: true) {
+                            deepLink.cancel()
+                        }
+                        .padding(.horizontal, 28)
+                    }
 
-            Spacer().frame(height: 24)
+                    Spacer().frame(height: 12)
+                }
+                .padding(.top, 16)
+            }
         }
         .task { await loadAgentInfo() }
+    }
+
+    private func permissionRow(icon: String, color: Color, text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundStyle(color)
+            Text(text).font(HU.rounded(13)).foregroundStyle(HU.C.ink)
+        }
     }
 
     private func loadAgentInfo() async {
@@ -141,9 +140,7 @@ struct AuthorizeView: View {
                 "/v1/app/public/agents/\(pending.agentId)"
             )
             self.agentInfo = info
-        } catch {
-            // not fatal — fall back to placeholder
-        }
+        } catch {}
     }
 
     private func confirm() async {
@@ -152,7 +149,6 @@ struct AuthorizeView: View {
         do {
             try await deepLink.confirm(pending)
             await PushService.shared.refreshCategories()
-            // First-auth tutorial push so the user learns long-press
             await sendTutorialPush()
             done = true
         } catch {
@@ -160,14 +156,12 @@ struct AuthorizeView: View {
         }
     }
 
-    /// After authorizing, post a local notification that teaches the long-press gesture.
     private func sendTutorialPush() async {
         let content = UNMutableNotificationContent()
         content.title = "🎉 授权成功"
         content.body = "下次收到这种推送，长按它就能看到选项 ✓ / ✗"
         content.sound = .default
         if #available(iOS 15.0, *) { content.interruptionLevel = .active }
-        // Use confirm_reject so the user can experiment with the long-press gesture
         content.categoryIdentifier = "confirm_reject"
         content.userInfo = ["message_id": "tutorial-\(UUID().uuidString)"]
         let req = UNNotificationRequest(
@@ -178,5 +172,3 @@ struct AuthorizeView: View {
         try? await UNUserNotificationCenter.current().add(req)
     }
 }
-
-import UserNotifications

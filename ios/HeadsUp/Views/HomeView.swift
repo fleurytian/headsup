@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @EnvironmentObject var auth: AuthService
@@ -10,21 +11,27 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                HU.C.bg.ignoresSafeArea()
+
                 if bindings.isEmpty && !loading {
-                    EmptyAgentsView()
+                    EmptyAgentsView(showAddAgent: $showAddAgent)
                 } else {
-                    List {
-                        Section("已授权的 Agent") {
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            HStack {
+                                RetroLabel(text: "AUTHORIZED  AGENTS")
+                                Spacer()
+                                Text("\(bindings.count)").font(HU.mono(11, weight: .semibold))
+                                    .foregroundStyle(HU.C.muted)
+                            }
+                            .padding(.horizontal, 4)
+
                             ForEach(bindings) { agent in
                                 NavigationLink(destination: AgentDetailView(binding: agent)) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(agent.agentName).font(.body)
-                                        Text("授权于 \(agent.boundAt.formatted(date: .abbreviated, time: .shortened))")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
+                                    AgentRow(binding: agent)
                                 }
+                                .buttonStyle(.plain)
                                 .swipeActions(edge: .trailing) {
                                     Button("撤销", role: .destructive) {
                                         Task { await revoke(agent) }
@@ -32,30 +39,38 @@ struct HomeView: View {
                                 }
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                     }
                 }
             }
-            .navigationTitle("HeadsUp")
+            .navigationTitle("")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button { showAddAgent = true } label: {
-                        Image(systemName: "plus.circle.fill").font(.title2)
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(HU.C.lavender)
                     }
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("HEADSUP")
+                        .font(HU.rounded(14, weight: .heavy))
+                        .tracking(4)
+                        .foregroundStyle(HU.C.ink)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink {
                         SettingsView()
                     } label: {
                         Image(systemName: "person.crop.circle")
+                            .font(.title2)
+                            .foregroundStyle(HU.C.muted)
                     }
                 }
             }
-            .refreshable {
-                await loadBindings()
-            }
-            .task {
-                await loadBindings()
-            }
+            .refreshable { await loadBindings() }
+            .task { await loadBindings() }
             .onChange(of: deepLink.pendingAuthorize?.id) { _ in
                 Task { await loadBindings() }
             }
@@ -94,66 +109,91 @@ struct HomeView: View {
     }
 }
 
+private struct AgentRow: View {
+    let binding: AgentBinding
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle().fill(HU.pastelGradient).frame(width: 44, height: 44)
+                Text(String(binding.agentName.prefix(1)).uppercased())
+                    .font(HU.rounded(18, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(binding.agentName).font(HU.rounded(16, weight: .medium)).foregroundStyle(HU.C.ink)
+                Text("\(HU.bullet) bound \(binding.boundAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(HU.mono(10)).tracking(0.3).foregroundStyle(HU.C.muted)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(HU.C.muted.opacity(0.5))
+        }
+        .padding(14)
+        .vaporCard()
+    }
+}
+
 struct EmptyAgentsView: View {
+    @Binding var showAddAgent: Bool
     @EnvironmentObject var deepLink: DeepLinkHandler
-    @State private var pasteFieldText: String = ""
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                Spacer().frame(height: 60)
-                Image(systemName: "tray")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.tertiary)
-                VStack(spacing: 8) {
-                    Text("还没有 Agent").font(.title3.weight(.semibold))
-                    Text("当你的 AI 助手要在手机上联系你时，\n它会发一个授权链接给你。\n点开链接就能授权它给你发推送。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+            VStack(spacing: 24) {
+                Spacer().frame(height: 40)
+
+                ZStack {
+                    Circle().fill(HU.pastelGradient.opacity(0.18)).frame(width: 140, height: 140)
+                    VStack(spacing: 4) {
+                        Text("🌙").font(.system(size: 48))
+                        Text("zzz").font(HU.mono(11)).tracking(2).foregroundStyle(HU.C.muted)
+                    }
                 }
 
-                Divider().padding(.vertical, 8)
+                VStack(spacing: 8) {
+                    Text("没有 Agent")
+                        .font(HU.rounded(20, weight: .bold)).tracking(2)
+                        .foregroundStyle(HU.C.ink)
+                    Text("\(HU.diamond)  WAITING FOR INVITATION  \(HU.diamond)")
+                        .font(HU.mono(10, weight: .medium)).tracking(2)
+                        .foregroundStyle(HU.C.muted)
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Or paste an authorization link")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                    HStack {
-                        TextField("headsup://authorize?...", text: $pasteFieldText)
-                            .textFieldStyle(.roundedBorder)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .onSubmit { tryParseLink() }
-                        Button("Open") { tryParseLink() }
-                            .disabled(pasteFieldText.isEmpty)
-                    }
-                    Button {
-                        if let s = UIPasteboard.general.string {
-                            pasteFieldText = s
-                            tryParseLink()
-                        }
-                    } label: {
-                        Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
-                            .font(.caption)
-                    }
+                    Text("HOW IT WORKS")
+                        .font(HU.mono(10, weight: .semibold)).tracking(2)
+                        .foregroundStyle(HU.C.lavender)
+                    BulletLine(text: "你的 AI 助手会读 headsup.md/skill.md 学协议")
+                    BulletLine(text: "它会发一个 headsup:// 授权链接给你")
+                    BulletLine(text: "点开 → 一次授权 → 它就能在通知栏找你")
                 }
-                .padding(.horizontal, 24)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .vaporCard()
+                .padding(.horizontal, 20)
 
-                Text("（拉下来刷新列表）").font(.caption2).foregroundStyle(.tertiary)
+                VaporButton(title: "添加 Agent", icon: "plus") {
+                    showAddAgent = true
+                }
+                .padding(.horizontal, 32)
+                .padding(.top, 4)
+
+                Text("\(HU.bullet) pull to refresh \(HU.bullet)")
+                    .font(HU.mono(10)).tracking(2).foregroundStyle(HU.C.muted.opacity(0.6))
             }
-            .frame(maxWidth: .infinity)
             .padding(.bottom, 40)
+            .frame(maxWidth: .infinity)
         }
     }
+}
 
-    private func tryParseLink() {
-        let trimmed = pasteFieldText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              url.scheme == "headsup",
-              url.host == "authorize" else { return }
-        deepLink.handle(url: url)
-        pasteFieldText = ""
+private struct BulletLine: View {
+    let text: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(HU.star).font(HU.mono(11)).foregroundStyle(HU.C.pink)
+            Text(text).font(HU.rounded(13)).foregroundStyle(HU.C.ink.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
