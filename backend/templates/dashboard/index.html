@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — HeadsUp{% endblock %}
+{% block body %}
+{% include "dashboard/nav.html" %}
+<div class="max-w-4xl mx-auto px-6 py-8">
+  <h1 class="text-2xl font-bold mb-6">Overview</h1>
+
+  <div class="grid grid-cols-3 gap-4 mb-8">
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <div class="text-3xl font-bold text-blue-600">{{ user_count }}</div>
+      <div class="text-sm text-gray-500 mt-1">Active Users</div>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <div class="text-sm font-mono text-gray-700 truncate">{{ agent.api_key }}</div>
+      <div class="text-sm text-gray-500 mt-1">API Key</div>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <div class="text-sm text-gray-700 truncate">{{ agent.webhook_url or "Not set" }}</div>
+      <div class="text-sm text-gray-500 mt-1">Webhook URL</div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+    <h2 class="font-semibold mb-3">Your Authorization Link</h2>
+    <p class="text-sm text-gray-500 mb-3">Share this link with users to let them authorize your agent.</p>
+    <div class="flex items-center gap-2">
+      <input type="text" readonly value="{{ auth_link }}"
+        class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+      <button onclick="navigator.clipboard.writeText('{{ auth_link }}')"
+        class="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+        Copy
+      </button>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <h2 class="font-semibold mb-3">Recent Messages</h2>
+    {% if recent_messages %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-gray-500 border-b border-gray-100">
+          <th class="pb-2">Title</th>
+          <th class="pb-2">Status</th>
+          <th class="pb-2">Sent</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for m in recent_messages %}
+        <tr>
+          <td class="py-2">{{ m.title }}</td>
+          <td class="py-2">
+            <span class="px-2 py-0.5 rounded-full text-xs
+              {% if m.status == 'delivered' %}bg-green-100 text-green-700
+              {% elif m.status == 'failed' %}bg-red-100 text-red-700
+              {% else %}bg-gray-100 text-gray-600{% endif %}">
+              {{ m.status }}
+            </span>
+          </td>
+          <td class="py-2 text-gray-400">{{ m.created_at.strftime('%m/%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-gray-400 text-sm">No messages yet. Send your first push via the API.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

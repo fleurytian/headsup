@@ -1,0 +1,71 @@
+name: HeadsUp
+options:
+  bundleIdPrefix: md.headsup
+  deploymentTarget:
+    iOS: "16.0"
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: N74WZGGX8W
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  HeadsUp:
+    type: application
+    platform: iOS
+    sources:
+      - path: HeadsUp
+    info:
+      path: HeadsUp/Info.plist
+      properties:
+        CFBundleDisplayName: HeadsUp
+        CFBundleShortVersionString: "1.0.0"
+        UILaunchScreen:
+          UIColorName: "AccentColor"
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - headsup
+        UIBackgroundModes:
+          - remote-notification
+        ApiBaseURL: "http://192.168.5.153:8000"
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+          NSExceptionDomains:
+            "192.168.5.153":
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: false
+    entitlements:
+      path: HeadsUp/HeadsUp.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.applesignin:
+          - Default
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: md.headsup.app
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: HeadsUp/HeadsUp.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - target: HeadsUpNotificationService
+
+  HeadsUpNotificationService:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: HeadsUpNotificationService
+    info:
+      path: HeadsUpNotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: HeadsUp Notification Service
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: md.headsup.app.NotificationService
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: NO

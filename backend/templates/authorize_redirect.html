@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Opening HeadsUp...</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Save the deep link in clipboard so a freshly-installed app can pick it up.
+    function copyAndOpen() {
+      const link = "{{ deep_link }}";
+      // Best-effort clipboard write (needs user gesture on iOS, hence button click)
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link);
+        }
+      } catch (e) {}
+      window.location.href = link;
+      setTimeout(function() {
+        document.getElementById('fallback').style.display = 'block';
+      }, 800);
+    }
+  </script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center px-4">
+  <div class="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+    <div class="text-4xl mb-4">📱</div>
+    <h1 class="text-lg font-bold mb-2">Open HeadsUp app</h1>
+    <p class="text-gray-500 text-sm mb-6">to authorize <strong>{{ agent_name }}</strong></p>
+
+    <button onclick="copyAndOpen()"
+      class="block w-full bg-blue-600 text-white font-semibold py-4 rounded-xl hover:bg-blue-700 transition mb-3 text-base">
+      Open in HeadsUp →
+    </button>
+
+    <div id="fallback" style="display:none">
+      <p class="text-xs text-gray-500 mt-4 mb-3">App not installed yet?</p>
+      <a href="{{ app_store_url }}"
+        onclick="navigator.clipboard && navigator.clipboard.writeText('{{ deep_link }}')"
+        class="block bg-gray-900 text-white text-sm font-medium py-2.5 rounded-xl hover:bg-black transition mb-2">
+        Download HeadsUp on App Store
+      </a>
+      <p class="text-xs text-gray-400">After installing, open HeadsUp and your authorization will resume automatically.</p>
+    </div>
+  </div>
+</body>
+</html>

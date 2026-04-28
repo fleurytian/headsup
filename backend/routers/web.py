@@ -1,0 +1,263 @@
+"""Web UI: Agent Dashboard + User Authorization flow."""
+from datetime import datetime, timedelta
+
+from typing import Optional
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, select
+
+from auth import create_access_token, hash_password, verify_password
+from config import settings
+from database import get_session
+from models import (
+    Agent,
+    AgentUserBinding,
+    AppUser,
+    AuthorizationRequest,
+    PushMessage,
+    gen_auth_token,
+)
+
+router = APIRouter(tags=["web"])
+templates = Jinja2Templates(directory="templates")
+
+AUTH_TOKEN_TTL_MINUTES = 5
+
+
+# ── Authorization flow ────────────────────────────────────────────────────────
+
+@router.get("/authorize", response_class=HTMLResponse)
+def authorize_page(agent_id: str, request: Request, session: Session = Depends(get_session)):
+    agent = session.get(Agent, agent_id)
+    if not agent:
+        return HTMLResponse("<h1>Agent not found</h1>", status_code=404)
+    return templates.TemplateResponse("authorize.html", {
+        "request": request,
+        "agent": agent,
+        "base_url": settings.base_url,
+    })
+
+
+@router.post("/authorize/initiate")
+def authorize_initiate(
+    request: Request,
+    agent_id: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """Creates a short-lived token and redirects to the iOS app via deep link."""
+    agent = session.get(Agent, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    auth_req = AuthorizationRequest(
+        agent_id=agent_id,
+        expires_at=datetime.utcnow() + timedelta(minutes=AUTH_TOKEN_TTL_MINUTES),
+    )
+    session.add(auth_req)
+    session.commit()
+
+    deep_link = f"headsup://authorize?token={auth_req.token}&agent_id={agent_id}"
+    app_store_url = "https://apps.apple.com/app/headsup"
+    return templates.TemplateResponse("authorize_redirect.html", {
+        "request": request,
+        "deep_link": deep_link,
+        "app_store_url": app_store_url,
+        "agent_name": agent.name,
+    })
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+def _get_dashboard_agent(request: Request, session: Session) -> Optional[Agent]:
+    token = request.cookies.get("dashboard_token")
+    if not token:
+        return None
+    from auth import decode_access_token
+    agent_id = decode_access_token(token)
+    if not agent_id:
+        return None
+    return session.get(Agent, agent_id)
+
+
+@router.get("/dashboard/login", response_class=HTMLResponse)
+def dashboard_login(request: Request):
+    return templates.TemplateResponse("dashboard/login.html", {"request": request, "error": None})
+
+
+@router.post("/dashboard/login", response_class=HTMLResponse)
+def dashboard_login_post(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    agent = session.exec(select(Agent).where(Agent.email == email)).first()
+    if not agent or not verify_password(password, agent.password_hash):
+        return templates.TemplateResponse(
+            "dashboard/login.html", {"request": request, "error": "Invalid email or password"}
+        )
+    token = create_access_token(agent.id)
+    resp = RedirectResponse("/dashboard", status_code=303)
+    resp.set_cookie("dashboard_token", token, httponly=True, max_age=60 * 60 * 24 * 30)
+    return resp
+
+
+@router.get("/dashboard/register", response_class=HTMLResponse)
+def dashboard_register(request: Request):
+    return templates.TemplateResponse("dashboard/register.html", {"request": request, "error": None})
+
+
+@router.post("/dashboard/register", response_class=HTMLResponse)
+def dashboard_register_post(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    webhook_url: str = Form(default=""),
+    session: Session = Depends(get_session),
+):
+    existing = session.exec(select(Agent).where(Agent.email == email)).first()
+    if existing:
+        return templates.TemplateResponse(
+            "dashboard/register.html", {"request": request, "error": "Email already registered"}
+        )
+    agent = Agent(
+        name=name,
+        email=email,
+        password_hash=hash_password(password),
+        webhook_url=webhook_url or None,
+    )
+    session.add(agent)
+    session.commit()
+    token = create_access_token(agent.id)
+    resp = RedirectResponse("/dashboard", status_code=303)
+    resp.set_cookie("dashboard_token", token, httponly=True, max_age=60 * 60 * 24 * 30)
+    return resp
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+def dashboard_home(request: Request, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+
+    user_count = len(session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.agent_id == agent.id,
+            AgentUserBinding.status == "active",
+        )
+    ).all())
+
+    recent_messages = session.exec(
+        select(PushMessage)
+        .where(PushMessage.agent_id == agent.id)
+        .order_by(PushMessage.created_at.desc())
+        .limit(5)
+    ).all()
+
+    return templates.TemplateResponse("dashboard/index.html", {
+        "request": request,
+        "agent": agent,
+        "user_count": user_count,
+        "recent_messages": recent_messages,
+        "auth_link": f"{settings.base_url}/authorize?agent_id={agent.id}",
+    })
+
+
+@router.get("/dashboard/users", response_class=HTMLResponse)
+def dashboard_users(request: Request, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+
+    bindings = session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.agent_id == agent.id,
+            AgentUserBinding.status == "active",
+        ).order_by(AgentUserBinding.bound_at.desc())
+    ).all()
+
+    users = []
+    for b in bindings:
+        user = session.get(AppUser, b.user_id)
+        if user:
+            users.append({"user_key": user.user_key, "bound_at": b.bound_at})
+
+    return templates.TemplateResponse("dashboard/users.html", {
+        "request": request,
+        "agent": agent,
+        "users": users,
+    })
+
+
+@router.get("/dashboard/messages", response_class=HTMLResponse)
+def dashboard_messages(request: Request, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+
+    messages = session.exec(
+        select(PushMessage)
+        .where(PushMessage.agent_id == agent.id)
+        .order_by(PushMessage.created_at.desc())
+        .limit(50)
+    ).all()
+
+    enriched = []
+    for m in messages:
+        user = session.get(AppUser, m.user_id)
+        enriched.append({
+            "id": m.id,
+            "user_key": user.user_key if user else "?",
+            "title": m.title,
+            "body": m.body,
+            "category_id": m.category_id,
+            "status": m.status,
+            "created_at": m.created_at,
+        })
+
+    return templates.TemplateResponse("dashboard/messages.html", {
+        "request": request,
+        "agent": agent,
+        "messages": enriched,
+    })
+
+
+@router.get("/dashboard/settings", response_class=HTMLResponse)
+def dashboard_settings(request: Request, session: Session = Depends(get_session)):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+    return templates.TemplateResponse("dashboard/settings.html", {
+        "request": request,
+        "agent": agent,
+        "auth_link": f"{settings.base_url}/authorize?agent_id={agent.id}",
+    })
+
+
+@router.post("/dashboard/settings", response_class=HTMLResponse)
+def dashboard_settings_post(
+    request: Request,
+    webhook_url: str = Form(default=""),
+    session: Session = Depends(get_session),
+):
+    agent = _get_dashboard_agent(request, session)
+    if not agent:
+        return RedirectResponse("/dashboard/login")
+    agent.webhook_url = webhook_url or None
+    session.add(agent)
+    session.commit()
+    return templates.TemplateResponse("dashboard/settings.html", {
+        "request": request,
+        "agent": agent,
+        "auth_link": f"{settings.base_url}/authorize?agent_id={agent.id}",
+        "saved": True,
+    })
+
+
+@router.post("/dashboard/logout")
+def dashboard_logout():
+    resp = RedirectResponse("/dashboard/login", status_code=303)
+    resp.delete_cookie("dashboard_token")
+    return resp

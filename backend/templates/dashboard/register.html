@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Register — HeadsUp Dashboard{% endblock %}
+{% block body %}
+<div class="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+  <div class="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full">
+    <h1 class="text-2xl font-bold mb-1">Create Agent</h1>
+    <p class="text-gray-500 text-sm mb-6">Register to start sending notifications</p>
+
+    {% if error %}
+    <div class="bg-red-50 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/dashboard/register" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Agent Name</label>
+        <input type="text" name="name" required placeholder="My AI Assistant"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <input type="email" name="email" required
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input type="password" name="password" required
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Webhook URL <span class="text-gray-400">(optional)</span></label>
+        <input type="url" name="webhook_url" placeholder="https://your-server.com/webhook"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <button type="submit"
+        class="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-lg hover:bg-blue-700 transition">
+        Create Agent
+      </button>
+    </form>
+
+    <p class="text-center text-sm text-gray-500 mt-4">
+      Already have an account? <a href="/dashboard/login" class="text-blue-600 hover:underline">Sign In</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

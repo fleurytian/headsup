@@ -1,0 +1,47 @@
+# Secrets
+**/secrets/
+*.p8
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# iOS
+ios/build/
+ios/DerivedData/
+ios/Pods/
+*.xcuserstate
+xcuserdata/
+
+# Xcode generated project (regenerable from project.yml via xcodegen)
+ios/HeadsUp.xcodeproj/
+
+# Local files
+test_headsup.db
+*.bak
+.pytest_cache/
+
+# Cache / temp
+/tmp/
+nohup.out
