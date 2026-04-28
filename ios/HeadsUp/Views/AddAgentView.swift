@@ -3,6 +3,7 @@ import UIKit
 
 struct AddAgentView: View {
     @EnvironmentObject var deepLink: DeepLinkHandler
+    @EnvironmentObject var loc: Localizer
     @Environment(\.dismiss) var dismiss
     @State private var pasteText: String = ""
     @State private var error: String?
@@ -20,14 +21,13 @@ struct AddAgentView: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             Eyebrow(text: "add agent")
-                            Text("把授权链接\n粘贴这里。")
+                            LText("把授权链接\n粘贴这里。", "Paste the\nauthorization link.")
                                 .font(.system(size: 26, weight: .heavy, design: .rounded))
                                 .foregroundStyle(HU.C.ink)
                                 .lineSpacing(4)
                         }
                         .padding(.horizontal, 24)
 
-                        // Paste field
                         VStack(alignment: .leading, spacing: 10) {
                             TextField("headsup://authorize?token=…", text: $pasteText, axis: .vertical)
                                 .font(.system(.callout, design: .monospaced))
@@ -41,15 +41,12 @@ struct AddAgentView: View {
                                 .lineLimit(1...3)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
-                            HStack(spacing: 14) {
-                                Button {
-                                    if let s = UIPasteboard.general.string { pasteText = s }
-                                } label: {
-                                    Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
-                                        .font(HU.small())
-                                        .foregroundStyle(HU.C.accent)
-                                }
-                                Spacer()
+                            Button {
+                                if let s = UIPasteboard.general.string { pasteText = s }
+                            } label: {
+                                Label(T("从剪贴板粘贴", "Paste from clipboard"), systemImage: "doc.on.clipboard")
+                                    .font(HU.small())
+                                    .foregroundStyle(HU.C.accent)
                             }
                             if let error = error {
                                 Text(error).font(HU.small()).foregroundStyle(HU.C.accent)
@@ -57,7 +54,7 @@ struct AddAgentView: View {
                         }
                         .padding(.horizontal, 24)
 
-                        PrimaryButton(title: "打开授权") { tryParseAndOpen() }
+                        PrimaryButton(title: T("打开授权", "Open authorization")) { tryParseAndOpen() }
                             .padding(.horizontal, 24)
                             .disabled(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .opacity(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
@@ -65,13 +62,13 @@ struct AddAgentView: View {
                         HairRule(label: "or")
                             .padding(.horizontal, 24)
 
-                        // How-to
                         VStack(alignment: .leading, spacing: 18) {
                             Eyebrow(text: "how to get one")
 
-                            StepRow(num: "01", text: "让你的 AI Agent（Hermes、Claude Code、OpenClaw、Codex 等）先读这个 URL 学协议：")
+                            StepRow(num: "01",
+                                    zh: "让你的 AI(Claude Code、Codex、Hermes、OpenClaw 等) 先读这个 URL 学协议:",
+                                    en: "Have your AI (Claude Code, Codex, Hermes, OpenClaw, etc.) read this URL first:")
 
-                            // Copy chip
                             HStack(spacing: 8) {
                                 Text(skillURL)
                                     .font(.system(size: 12, design: .monospaced))
@@ -90,7 +87,7 @@ struct AddAgentView: View {
                                     copiedSkillURL = true
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedSkillURL = false }
                                 } label: {
-                                    Text(copiedSkillURL ? "已复制" : "复制")
+                                    Text(copiedSkillURL ? T("已复制", "Copied") : T("复制", "Copy"))
                                         .font(HU.small(.semibold))
                                         .foregroundStyle(HU.C.bg)
                                         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -99,8 +96,12 @@ struct AddAgentView: View {
                             }
                             .padding(.leading, 38)
 
-                            StepRow(num: "02", text: "Agent 自己注册账号，把 headsup:// 链接发给你")
-                            StepRow(num: "03", text: "点链接 → Safari → 「Open in HeadsUp」会跳回这里授权")
+                            StepRow(num: "02",
+                                    zh: "Agent 自己注册账号,把 headsup:// 链接发给你",
+                                    en: "Agent registers itself and sends you a headsup:// link")
+                            StepRow(num: "03",
+                                    zh: "点链接 → Safari → 「Open in HeadsUp」会跳回这里授权",
+                                    en: "Tap link → Safari → 'Open in HeadsUp' brings you back here")
                         }
                         .padding(.horizontal, 24)
 
@@ -112,7 +113,7 @@ struct AddAgentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }
+                    Button(T("取消", "Cancel")) { dismiss() }
                         .font(HU.body()).foregroundStyle(HU.C.muted)
                 }
             }
@@ -122,9 +123,12 @@ struct AddAgentView: View {
 
     private func tryParseAndOpen() {
         let trimmed = pasteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed) else { error = "链接格式不对"; return }
+        guard let url = URL(string: trimmed) else {
+            error = T("链接格式不对", "Invalid link"); return
+        }
         guard url.scheme == "headsup", url.host == "authorize" else {
-            error = "这不是 HeadsUp 授权链接（应以 headsup://authorize 开头）"; return
+            error = T("这不是 HeadsUp 授权链接(应以 headsup://authorize 开头)",
+                     "Not a HeadsUp link (must start with headsup://authorize)"); return
         }
         deepLink.handle(url: url)
         dismiss()
@@ -133,7 +137,8 @@ struct AddAgentView: View {
 
 private struct StepRow: View {
     let num: String
-    let text: String
+    let zh: String
+    let en: String
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             Text(num)
@@ -141,7 +146,7 @@ private struct StepRow: View {
                 .tracking(1.5)
                 .foregroundStyle(HU.C.accent)
                 .frame(width: 22, alignment: .leading)
-            Text(text).font(HU.body()).foregroundStyle(HU.C.ink.opacity(0.85))
+            LText(zh, en).font(HU.body()).foregroundStyle(HU.C.ink.opacity(0.85))
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
         }

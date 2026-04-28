@@ -5,6 +5,7 @@ import UserNotifications
 struct SettingsView: View {
     @EnvironmentObject var auth: AuthService
     @EnvironmentObject var push: PushService
+    @EnvironmentObject var loc: Localizer
 
     @State private var copied = false
     @State private var muteUntil: Date?
@@ -18,11 +19,33 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     Spacer().frame(height: 4)
 
+                    // Language picker — first thing
+                    SettingsSection(title: "language") {
+                        HStack(spacing: 10) {
+                            ForEach(AppLanguage.allCases, id: \.self) { l in
+                                Button { loc.set(l) } label: {
+                                    Text(l.label)
+                                        .font(HU.body(.medium))
+                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                        .foregroundStyle(loc.lang == l ? HU.C.bg : HU.C.ink)
+                                        .background(
+                                            Capsule().fill(loc.lang == l ? HU.C.ink : Color.clear)
+                                        )
+                                        .overlay(
+                                            Capsule().strokeBorder(HU.C.ink, lineWidth: loc.lang == l ? 0 : 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
                     // Permission banner if denied
                     if permissionStatus == .denied {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "warning", color: HU.C.accent)
-                            Text("通知权限被关了。HeadsUp 现在收不到任何 agent 的通知。")
+                            LText("通知权限被关了。HeadsUp 现在收不到任何 agent 的通知。",
+                                  "Notification permission is off. HeadsUp can't deliver any agent's pushes right now.")
                                 .font(HU.body()).foregroundStyle(HU.C.ink)
                                 .lineSpacing(3)
                             Button {
@@ -30,7 +53,7 @@ struct SettingsView: View {
                                     UIApplication.shared.open(url)
                                 }
                             } label: {
-                                Text("打开 iOS 设置")
+                                Text(T("打开 iOS 设置", "Open iOS Settings"))
                                     .font(HU.small(.semibold))
                                     .foregroundStyle(HU.C.bg)
                                     .padding(.horizontal, 14).padding(.vertical, 8)
@@ -43,17 +66,16 @@ struct SettingsView: View {
                         .padding(.horizontal, 20)
                     }
 
-                    // 免打扰
                     SettingsSection(title: "do not disturb") {
                         if let until = muteUntil, until > Date() {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("已静音").font(HU.body(.medium)).foregroundStyle(HU.C.ink)
-                                    Text("到 \(until.formatted(date: .omitted, time: .shortened))")
+                                    LText("已静音", "Muted").font(HU.body(.medium)).foregroundStyle(HU.C.ink)
+                                    Text("\(T("到", "until")) \(until.formatted(date: .omitted, time: .shortened))")
                                         .font(HU.small()).foregroundStyle(HU.C.muted)
                                 }
                                 Spacer()
-                                Button("解除") { Task { await setMute(minutes: nil) } }
+                                Button(T("解除", "Unmute")) { Task { await setMute(minutes: nil) } }
                                     .font(HU.small(.semibold))
                                     .foregroundStyle(HU.C.accent)
                                     .disabled(muteLoading)
@@ -61,13 +83,12 @@ struct SettingsView: View {
                             .padding(16).card()
                         } else {
                             HStack(spacing: 10) {
-                                MuteButton(title: "1 小时", min: 60, action: setMute)
-                                MuteButton(title: "8 小时", min: 8 * 60, action: setMute)
+                                MuteButton(title: T("1 小时", "1 hour"), min: 60, action: setMute)
+                                MuteButton(title: T("8 小时", "8 hours"), min: 8 * 60, action: setMute)
                             }
                         }
                     }
 
-                    // 账号
                     SettingsSection(title: "account") {
                         VStack(alignment: .leading, spacing: 0) {
                             if let session = auth.session {
@@ -79,7 +100,7 @@ struct SettingsView: View {
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                                 } label: {
                                     HStack {
-                                        Text(copied ? "已复制" : "复制 User Key")
+                                        Text(copied ? T("已复制", "Copied") : T("复制 User Key", "Copy User Key"))
                                             .font(HU.body()).foregroundStyle(HU.C.accent)
                                         Spacer()
                                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
@@ -93,7 +114,6 @@ struct SettingsView: View {
                         .card()
                     }
 
-                    // 通知
                     SettingsSection(title: "notifications") {
                         VStack(alignment: .leading, spacing: 0) {
                             SettingsKeyValue(
@@ -109,13 +129,12 @@ struct SettingsView: View {
                         .card()
                     }
 
-                    // 登出
                     Button(role: .destructive) {
                         auth.signOut()
                     } label: {
                         HStack {
                             Spacer()
-                            Text("登出").font(HU.body(.medium)).foregroundStyle(HU.C.accent)
+                            LText("登出", "Sign out").font(HU.body(.medium)).foregroundStyle(HU.C.accent)
                             Spacer()
                         }
                         .padding(.vertical, 14)
@@ -146,11 +165,10 @@ struct SettingsView: View {
 
     private var permissionLabel: String {
         switch permissionStatus {
-        case .authorized: return "已开启"
-        case .denied: return "已拒绝"
-        case .notDetermined: return "未设置"
-        case .provisional: return "临时"
-        case .ephemeral: return "临时"
+        case .authorized: return T("已开启", "Granted")
+        case .denied: return T("已拒绝", "Denied")
+        case .notDetermined: return T("未设置", "Not set")
+        case .provisional, .ephemeral: return T("临时", "Provisional")
         @unknown default: return "?"
         }
     }

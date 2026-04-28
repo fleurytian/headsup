@@ -32,10 +32,22 @@ class Agent(SQLModel, table=True):
     webhook_url: Optional[str] = None
     description: Optional[str] = None     # shown to users on authorize page
     logo_url: Optional[str] = None        # optional avatar URL
+    agent_type: Optional[str] = None      # slug: assistant | coding | automation | monitor | companion | research | other
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     bindings: list["AgentUserBinding"] = Relationship(back_populates="agent")
     messages: list["PushMessage"] = Relationship(back_populates="agent")
+
+
+AGENT_TYPES = {
+    "assistant":  ("通用助手",   "General Assistant"),
+    "coding":     ("代码助手",   "Coding"),
+    "automation": ("自动化",     "Automation"),
+    "monitor":    ("监控告警",   "Monitoring"),
+    "companion":  ("生活伴侣",   "Companion"),
+    "research":   ("研究分析",   "Research"),
+    "other":      ("其他",       "Other"),
+}
 
 
 class AppUser(SQLModel, table=True):
@@ -138,6 +150,9 @@ class AgentRegisterRequest(SQLModel):
     email: str
     password: str
     webhook_url: Optional[str] = None
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    agent_type: Optional[str] = None  # one of AGENT_TYPES keys
 
 
 class AgentLoginRequest(SQLModel):
@@ -151,6 +166,9 @@ class AgentResponse(SQLModel):
     email: str
     api_key: str
     webhook_url: Optional[str]
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    agent_type: Optional[str] = None
     created_at: datetime
 
 
@@ -285,6 +303,7 @@ class AgentPublicResponse(SQLModel):
     name: str
     description: Optional[str] = None
     logo_url: Optional[str] = None
+    agent_type: Optional[str] = None
     created_at: datetime
 
 

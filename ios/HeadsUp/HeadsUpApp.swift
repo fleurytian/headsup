@@ -7,6 +7,7 @@ struct HeadsUpApp: App {
     @StateObject private var auth = AuthService.shared
     @StateObject private var push = PushService.shared
     @StateObject private var deepLink = DeepLinkHandler.shared
+    @StateObject private var loc = Localizer.shared
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +15,7 @@ struct HeadsUpApp: App {
                 .environmentObject(auth)
                 .environmentObject(push)
                 .environmentObject(deepLink)
+                .environmentObject(loc)
                 .onOpenURL { url in
                     deepLink.handle(url: url)
                 }

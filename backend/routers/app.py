@@ -292,6 +292,7 @@ def public_agent_info(agent_id: str, session: Session = Depends(get_session)):
         name=agent.name,
         description=agent.description,
         logo_url=agent.logo_url,
+        agent_type=agent.agent_type,
         created_at=agent.created_at,
     )
 

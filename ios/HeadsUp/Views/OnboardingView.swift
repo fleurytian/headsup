@@ -4,6 +4,7 @@ import AuthenticationServices
 struct OnboardingView: View {
     @EnvironmentObject var auth: AuthService
     @EnvironmentObject var push: PushService
+    @EnvironmentObject var loc: Localizer
 
     var body: some View {
         ZStack {
@@ -12,13 +13,15 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Spacer().frame(height: 60)
 
-                // top eyebrow
-                Eyebrow(text: "headsup · md")
-                    .padding(.horizontal, 32)
+                HStack {
+                    Eyebrow(text: "headsup · md")
+                    Spacer()
+                    LanguageToggle()
+                }
+                .padding(.horizontal, 32)
 
                 Spacer().frame(height: 14)
 
-                // single sun mark, very small, accent only
                 Circle()
                     .fill(HU.C.accent)
                     .frame(width: 18, height: 18)
@@ -26,24 +29,29 @@ struct OnboardingView: View {
 
                 Spacer().frame(height: 30)
 
-                // headline — large, generous letter spacing
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("一个让 AI\n来通知栏找你的\n小工具。")
-                        .font(.system(size: 30, weight: .heavy, design: .rounded))
-                        .foregroundStyle(HU.C.ink)
-                        .lineSpacing(6)
-                    Text("Yes / no / wait — without opening a thing.")
-                        .font(HU.body())
-                        .italic()
-                        .foregroundStyle(HU.C.muted)
+                VStack(alignment: .leading, spacing: 12) {
+                    LText(
+                        "让你的 AI\n通过读 skill.md\n来给你提个醒。",
+                        "Let your agents\ngive you a heads up\nby reading skill.md."
+                    )
+                    .font(.system(size: 28, weight: .heavy, design: .rounded))
+                    .foregroundStyle(HU.C.ink)
+                    .lineSpacing(6)
+
+                    LText(
+                        "Yes / No / Wait — 不用打开任何 App。",
+                        "Yes / No / Wait — without opening a thing."
+                    )
+                    .font(HU.body())
+                    .italic()
+                    .foregroundStyle(HU.C.muted)
                 }
                 .padding(.horizontal, 32)
 
                 Spacer()
 
-                // sign-in section, anchored bottom
                 VStack(alignment: .leading, spacing: 14) {
-                    HairRule(label: "begin")
+                    HairRule(label: loc.lang == .zh ? "begin" : "begin")
                     SignInWithAppleButton(.signIn) { request in
                         request.requestedScopes = [.fullName, .email]
                     } onCompletion: { result in
@@ -69,14 +77,41 @@ struct OnboardingView: View {
                         Text(err).font(HU.small()).foregroundStyle(HU.C.accent)
                     }
 
-                    Text("继续即同意接收你授权的 agent 发送的交互通知。")
-                        .font(HU.small())
-                        .foregroundStyle(HU.C.muted)
-                        .lineSpacing(2)
+                    LText(
+                        "继续即同意接收你授权的 agent 发送的交互通知。",
+                        "By continuing you accept interactive notifications from agents you authorize."
+                    )
+                    .font(HU.small())
+                    .foregroundStyle(HU.C.muted)
+                    .lineSpacing(2)
                 }
                 .padding(.horizontal, 32)
                 .padding(.bottom, 40)
             }
         }
+    }
+}
+
+/// Small ZH / EN toggle pill — sits in top-right of any screen.
+struct LanguageToggle: View {
+    @EnvironmentObject var loc: Localizer
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(AppLanguage.allCases, id: \.self) { l in
+                Button { loc.set(l) } label: {
+                    Text(l.label)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .tracking(0.5)
+                        .foregroundStyle(loc.lang == l ? HU.C.bg : HU.C.muted)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(loc.lang == l ? HU.C.ink : Color.clear)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(HU.C.card))
+        .overlay(Capsule().strokeBorder(HU.C.line, lineWidth: 1))
     }
 }

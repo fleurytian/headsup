@@ -22,11 +22,21 @@ def register(req: AgentRegisterRequest, session: Session = Depends(get_session))
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    from models import AGENT_TYPES
+    if req.agent_type and req.agent_type not in AGENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"agent_type must be one of: {', '.join(AGENT_TYPES.keys())}",
+        )
+
     agent = Agent(
         name=req.name,
         email=req.email,
         password_hash=hash_password(req.password),
         webhook_url=req.webhook_url,
+        description=req.description,
+        logo_url=req.logo_url,
+        agent_type=req.agent_type,
     )
     session.add(agent)
     session.commit()
