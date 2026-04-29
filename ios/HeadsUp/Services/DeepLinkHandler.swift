@@ -11,18 +11,22 @@ final class DeepLinkHandler: ObservableObject {
     struct PendingAuthorize: Identifiable {
         let id = UUID()
         let token: String
-        let agentId: String
+        /// Filled in by AuthorizeView via /v1/app/public/auth-requests/<token>
+        /// when the deep link doesn't carry it. Many agents drop the second
+        /// query parameter, so token-only links are now the canonical form.
+        var agentId: String
     }
 
-    /// Called when the app opens via headsup://authorize?token=...&agent_id=...
+    /// Called when the app opens via:
+    ///   headsup://authorize?token=...                  (preferred)
+    ///   headsup://authorize?token=...&agent_id=...     (legacy)
     func handle(url: URL) {
         guard url.scheme == "headsup", url.host == "authorize" else { return }
-
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        guard let token = components?.queryItems?.first(where: { $0.name == "token" })?.value,
-              let agentId = components?.queryItems?.first(where: { $0.name == "agent_id" })?.value else {
+        guard let token = components?.queryItems?.first(where: { $0.name == "token" })?.value else {
             return
         }
+        let agentId = components?.queryItems?.first(where: { $0.name == "agent_id" })?.value ?? ""
         pendingAuthorize = PendingAuthorize(token: token, agentId: agentId)
     }
 

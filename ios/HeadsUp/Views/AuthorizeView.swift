@@ -157,11 +157,37 @@ struct AuthorizeView: View {
     private func loadAgentInfo() async {
         loadingInfo = true
         defer { loadingInfo = false }
+        // If the deep link carried only the token (the recommended canonical
+        // form), look up the agent_id from the token first. If it carried both,
+        // we can fetch the agent directly.
+        struct AuthRequestInfo: Codable {
+            let token: String
+            let agent: AgentPublic
+            let expires_at: String?
+        }
         do {
-            let info: AgentPublic = try await APIClient.shared.get(
-                "/v1/app/public/agents/\(pending.agentId)"
-            )
-            self.agentInfo = info
+            if pending.agentId.isEmpty {
+                let resp: AuthRequestInfo = try await APIClient.shared.get(
+                    "/v1/app/public/auth-requests/\(pending.token)"
+                )
+                self.agentInfo = resp.agent
+                // backfill agent_id so confirm() can use the existing endpoint
+                if var p = deepLink.pendingAuthorize {
+                    p.agentId = resp.agent.id
+                    deepLink.pendingAuthorize = p
+                }
+            } else {
+                let info: AgentPublic = try await APIClient.shared.get(
+                    "/v1/app/public/agents/\(pending.agentId)"
+                )
+                self.agentInfo = info
+            }
+        } catch APIError.http(410, _) {
+            self.error = T("授权链接已过期。让 agent 重新发一个给你。",
+                           "This authorization link has expired. Ask the agent to send a fresh one.")
+        } catch APIError.http(404, _), APIError.http(409, _) {
+            self.error = T("链接已被使用过或无效。让 agent 重新发一个。",
+                           "Link already used or invalid. Ask the agent to send a fresh one.")
         } catch {}
     }
 
@@ -196,11 +222,33 @@ struct AuthorizeView: View {
         if #available(iOS 15.0, *) { content.interruptionLevel = .active }
         content.categoryIdentifier = "confirm_reject"
         content.userInfo = ["message_id": "tutorial-\(UUID().uuidString)"]
+
+        // Attach the agent's logo so the tutorial preview matches the real
+        // pushes this agent will send. If the agent didn't set a logo_url,
+        // fall through with no attachment.
+        if let logo = agentInfo?.logo_url, let url = URL(string: logo),
+           let attachment = await downloadTempAttachment(url) {
+            content.attachments = [attachment]
+        }
+
         let req = UNNotificationRequest(
             identifier: "tutorial_\(UUID().uuidString)",
             content: content,
             trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1.5, repeats: false)
         )
         try? await UNUserNotificationCenter.current().add(req)
+    }
+
+    private func downloadTempAttachment(_ url: URL) async -> UNNotificationAttachment? {
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let ext = url.pathExtension.isEmpty ? "img" : url.pathExtension
+            let tmp = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(UUID().uuidString).\(ext)")
+            try data.write(to: tmp)
+            return try UNNotificationAttachment(identifier: "logo", url: tmp)
+        } catch {
+            return nil
+        }
     }
 }

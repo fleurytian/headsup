@@ -28,13 +28,36 @@ AUTH_TOKEN_TTL_MINUTES = 30
 # ── Authorization flow ────────────────────────────────────────────────────────
 
 @router.get("/authorize", response_class=HTMLResponse)
-def authorize_page(agent_id: str, request: Request, session: Session = Depends(get_session)):
-    agent = session.get(Agent, agent_id)
+def authorize_page(
+    request: Request,
+    token: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    """Renders the in-Safari "Open in HeadsUp" landing.
+
+    Accepts either:
+      - ?token=<t>            ← preferred. agent_id is looked up from the token.
+      - ?token=<t>&agent_id=  ← legacy form, still works.
+      - ?agent_id=<id>        ← legacy form for static permanent links.
+    """
+    agent = None
+    deep_link_token = token
+    if token:
+        auth_req = session.exec(
+            select(AuthorizationRequest).where(AuthorizationRequest.token == token)
+        ).first()
+        if auth_req:
+            agent = session.get(Agent, auth_req.agent_id)
+    if not agent and agent_id:
+        agent = session.get(Agent, agent_id)
     if not agent:
         return HTMLResponse("<h1>Agent not found</h1>", status_code=404)
+
     return templates.TemplateResponse("authorize.html", {
         "request": request,
         "agent": agent,
+        "token": deep_link_token,
         "base_url": settings.base_url,
     })
 
@@ -57,7 +80,10 @@ def authorize_initiate(
     session.add(auth_req)
     session.commit()
 
-    deep_link = f"headsup://authorize?token={auth_req.token}&agent_id={agent_id}"
+    # Token-only deep link — the iOS app looks up agent_id from the token
+    # (via /v1/app/public/auth-requests/<token>). Half the URL length, half
+    # the chance of an agent dropping a query param.
+    deep_link = f"headsup://authorize?token={auth_req.token}"
     app_store_url = "https://apps.apple.com/app/headsup"
     return templates.TemplateResponse("authorize_redirect.html", {
         "request": request,

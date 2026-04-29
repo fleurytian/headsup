@@ -310,6 +310,44 @@ def public_agent_info(agent_id: str, session: Session = Depends(get_session)):
     )
 
 
+@router.get("/public/auth-requests/{token}")
+def public_auth_request(token: str, session: Session = Depends(get_session)):
+    """Resolve an authorization token to its agent + status.
+    Used by the iOS app to render the consent screen given only `token`
+    in the deep link — so URLs no longer need to carry agent_id and
+    can't be mangled by agents who shorten or drop query params.
+    """
+    auth_req = session.exec(
+        select(AuthorizationRequest).where(
+            AuthorizationRequest.token == token,
+        )
+    ).first()
+    if not auth_req:
+        raise HTTPException(status_code=404,
+            detail="Authorization link is invalid (already used or never existed)")
+    if auth_req.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=410,
+            detail="Authorization link expired — ask the agent to send a fresh one")
+    if auth_req.used:
+        raise HTTPException(status_code=409,
+            detail="Authorization link already used")
+    agent = session.get(Agent, auth_req.agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {
+        "token": token,
+        "agent": AgentPublicResponse(
+            id=agent.id,
+            name=agent.name,
+            description=agent.description,
+            logo_url=agent.logo_url,
+            agent_type=agent.agent_type,
+            created_at=agent.created_at,
+        ),
+        "expires_at": auth_req.expires_at.isoformat(),
+    }
+
+
 # ── DND / mute ───────────────────────────────────────────────────────────────
 
 @router.post("/mute")
