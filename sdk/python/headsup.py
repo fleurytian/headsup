@@ -39,7 +39,7 @@ from typing import Any, Iterable
 
 import requests
 
-DEFAULT_BASE_URL = "https://api.headsup.md"
+DEFAULT_BASE_URL = "https://headsup.md"
 
 
 class HeadsUpError(Exception):
@@ -148,12 +148,61 @@ class HeadsUp:
             _time.sleep(poll_interval)
         return None
 
-    def responses(self, since: float | None = None, limit: int = 50) -> list[dict]:
-        """Poll for any responses across all your messages. For long-running agents."""
+    def responses(self, since=None, limit: int = 50) -> list[dict]:
+        """Poll for any responses across all your messages. For long-running agents.
+
+        `since` accepts an ISO-8601 string ("2026-04-29T00:00:00Z"), a unix
+        timestamp (1714291200), or a `datetime` instance. Server understands all.
+        """
         path = f"/v1/responses?limit={limit}"
         if since is not None:
+            from datetime import datetime as _dt
+            if isinstance(since, _dt):
+                since = since.isoformat()
             path += f"&since={since}"
         return self._get(path)
+
+    def subscribe(self, on_event):
+        """Long-poll the SSE stream and call `on_event(dict)` for each delivered tap.
+
+        Best for local agents that can't host a webhook. Connects once, stays
+        open. Reconnects automatically with exponential backoff. Blocks the
+        calling thread — typically run in its own thread or asyncio task.
+
+            def handle(event):
+                print(event["button_id"], event["data"])
+
+            threading.Thread(target=lambda: bot.subscribe(handle), daemon=True).start()
+        """
+        import json as _json, time as _time
+        backoff = 1.0
+        while True:
+            try:
+                with self._session.get(
+                    f"{self.base_url}/v1/responses/stream",
+                    stream=True,
+                    headers={"Accept": "text/event-stream"},
+                    timeout=None,
+                ) as r:
+                    r.raise_for_status()
+                    backoff = 1.0    # reset after a successful connect
+                    for line in r.iter_lines(decode_unicode=True):
+                        if line and line.startswith("data: "):
+                            try:
+                                on_event(_json.loads(line[6:]))
+                            except Exception:
+                                pass
+            except Exception:
+                _time.sleep(backoff)
+                backoff = min(backoff * 2, 30.0)
+
+    def retract(self, message_id: str) -> dict:
+        """Pull a previously-sent push from the user's Notification Center.
+
+        Useful when the situation has changed and you don't want the user to
+        see (or act on) the original push anymore. Idempotent.
+        """
+        return self._post(f"/v1/push/{message_id}/retract", {})
 
     def broadcast(
         self,
@@ -216,11 +265,29 @@ class HeadsUp:
     def me(self) -> dict:
         return self._get("/v1/agents/me")
 
-    @property
     def auth_link(self) -> str:
-        """The permanent URL you share with users to onboard them."""
+        """Generate a fresh single-use authorization link (30 min TTL).
+
+        The token-only URL is the canonical form — short and impossible for
+        an LLM to truncate. Returns a tappable https:// URL; tapping it on
+        iPhone opens the in-app authorize screen via the 'Open in HeadsUp'
+        landing.
+        """
+        # /authorize/initiate is form-encoded, no JSON.
         agent_id = self.me()["id"]
-        return f"{self.base_url}/authorize?agent_id={agent_id}"
+        r = self._session.post(
+            f"{self.base_url}/authorize/initiate",
+            data={"agent_id": agent_id},
+            timeout=self.timeout,
+        )
+        if not r.ok:
+            raise HeadsUpError(r.status_code, r.text)
+        # Server returns an HTML page; pull the deep link out of it.
+        import re as _re
+        m = _re.search(r'token=([A-Za-z0-9_\-]+)', r.text)
+        if not m:
+            raise HeadsUpError(500, "could not extract token from /authorize/initiate response")
+        return f"{self.base_url}/authorize?token={m.group(1)}&agent_id={agent_id}"
 
     # ── Webhook verification ───────────────────────────────────────────────
 
