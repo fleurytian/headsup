@@ -133,6 +133,37 @@ Use `since=` for incremental pulls (advance to the latest `replied_at` after eac
 
 The Python SDK's `bot.ask()` wraps SSE with polling fallback — `ask()` sends, blocks until response arrives, returns.
 
+### Multi-session agents: correlate responses with `data`
+
+If a single agent runs **multiple parallel sessions / tasks / users** (most non-trivial agents do), don't assume "the latest response is mine." Two pushes can interleave; a slow user can answer message A after you sent B; a webhook retry can land out of order.
+
+**Pattern**: stamp identity into `data` on every push, match it back on the response.
+
+```python
+# When sending
+push({
+  "user_key": "uk_xxx",
+  "category_id": "confirm_reject",
+  "title": "Send the email?",
+  "body": "Subject: weekly update — to engineering@",
+  "data": {
+    "session_id": "sess_8a3f",      # ← which session asked
+    "task_id":    "task_42",        # ← which task is waiting
+    "purpose":    "send_email",     # ← what kind of decision
+    "draft_id":   "d_19283",        # ← any other context you'll need to act
+  },
+})
+
+# When the response comes back (webhook OR SSE OR polling),
+# `data` is echoed back verbatim. Route on session_id/task_id, not recency.
+on_response(event):
+  sess = event.data["session_id"]
+  task = event.data["task_id"]
+  resume(sess, task, button=event.button_id)
+```
+
+**Belt-and-suspenders**: also use `message_id` from the push response for exact-match polling — `GET /v1/responses?message_id=<id>` returns just that one tap. Use this when *one* specific push is what you're blocking on; use `data` correlation when many can be in flight at once.
+
 ### Onboarding a new user
 
 Generate a single-use authorization link by POST'ing to `/authorize/initiate`:
