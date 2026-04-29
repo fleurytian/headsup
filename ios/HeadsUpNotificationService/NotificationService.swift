@@ -20,6 +20,8 @@ final class NotificationService: UNNotificationServiceExtension {
     var contentHandler: ((UNNotificationContent) -> Void)?
     var bestAttemptContent: UNMutableNotificationContent?
 
+    private var didFinish = false
+
     override func didReceive(
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
@@ -37,23 +39,22 @@ final class NotificationService: UNNotificationServiceExtension {
         let agentName = info["agent_name"] as? String
         let agentId = info["agent_id"] as? String
 
-        // Download what we have, in parallel. Each callback fires once.
         let group = DispatchGroup()
-        var attachment: UNNotificationAttachment? = nil
+        var imageFile: URL? = nil
+        var avatarFile: URL? = nil
         var avatarImage: INImage? = nil
 
         if let imageUrlString, let url = URL(string: imageUrlString) {
             group.enter()
             downloadFile(url: url) { localUrl in
-                if let localUrl, let att = try? UNNotificationAttachment(identifier: "image", url: localUrl, options: nil) {
-                    attachment = att
-                }
+                imageFile = localUrl
                 group.leave()
             }
         }
         if let avatarUrlString, let url = URL(string: avatarUrlString) {
             group.enter()
             downloadFile(url: url) { localUrl in
+                avatarFile = localUrl
                 if let localUrl, let data = try? Data(contentsOf: localUrl) {
                     avatarImage = INImage(imageData: data)
                 }
@@ -61,26 +62,33 @@ final class NotificationService: UNNotificationServiceExtension {
             }
         }
 
-        // 5-second deadline — iOS kills the extension after that.
-        let deadline: DispatchTime = .now() + .seconds(5)
-        group.notify(queue: .main) { [weak self] in
-            guard let self else { contentHandler(bestAttempt); return }
-            if let attachment { bestAttempt.attachments = [attachment] }
+        let finalize = { [weak self] in
+            guard let self, !self.didFinish else { return }
+            self.didFinish = true
+
+            // Right-side thumbnail: the per-message image_url if the agent set
+            // one, otherwise the avatar (so a notification ALWAYS has visible
+            // identity even without the comm-notification entitlement).
+            let attachmentSource = imageFile ?? avatarFile
+            if let src = attachmentSource,
+               let att = try? UNNotificationAttachment(identifier: "image", url: src, options: nil) {
+                bestAttempt.attachments = [att]
+            }
+
+            // Try to upgrade to a Communication Notification. Falls back
+            // silently to the regular banner if Apple's comm-notification
+            // entitlement isn't granted on this build.
             let upgraded = self.makeCommunication(
                 bestAttempt, agentName: agentName, agentId: agentId, image: avatarImage
             )
             contentHandler(upgraded ?? bestAttempt)
         }
-        // Hard timeout fallback in case downloads stall
-        DispatchQueue.main.asyncAfter(deadline: deadline) { [weak self] in
-            guard let self, let handler = self.contentHandler else { return }
-            self.contentHandler = nil   // prevent double-fire
-            if let attachment { bestAttempt.attachments = [attachment] }
-            let upgraded = self.makeCommunication(
-                bestAttempt, agentName: agentName, agentId: agentId, image: avatarImage
-            )
-            handler(upgraded ?? bestAttempt)
-        }
+
+        group.notify(queue: .main) { finalize() }
+        // Hard timeout — iOS kills NSE after ~30s but we want to ship before
+        // the user notices the extra delay. Whichever fires first wins;
+        // didFinish guards against the loser firing after.
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) { finalize() }
     }
 
     override func serviceExtensionTimeWillExpire() {
