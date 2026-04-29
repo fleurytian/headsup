@@ -39,18 +39,19 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-    entitlements:
-      path: HeadsUp/HeadsUp.entitlements
-      properties:
-        aps-environment: development
-        com.apple.developer.applesignin:
-          - Default
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: md.headsup.app
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_ENTITLEMENTS: HeadsUp/HeadsUp.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        Debug:
+          # Debug builds (Cmd-R from Xcode) use the development APNs sandbox.
+          CODE_SIGN_ENTITLEMENTS: HeadsUp/HeadsUp.entitlements
+        Release:
+          # Release builds (TestFlight / App Store) talk to production APNs.
+          # APNS_PRODUCTION on the server must also be set to true.
+          CODE_SIGN_ENTITLEMENTS: HeadsUp/HeadsUpRelease.entitlements
     dependencies:
       - target: HeadsUpNotificationService
 
