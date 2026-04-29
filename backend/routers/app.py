@@ -205,6 +205,16 @@ async def report_action(
 
     background_tasks.add_task(deliver_webhook, delivery.id)
 
+    # Parse `data` once before publishing — webhook + /v1/responses both
+    # surface it as a dict, so SSE must too. Was a string before and broke
+    # consumers that switched between transports.
+    parsed_data = {}
+    if message.data:
+        try:
+            parsed_data = json.loads(message.data)
+        except (json.JSONDecodeError, TypeError):
+            parsed_data = {}
+
     # Notify any open SSE streams for this agent — replaces the polling tax.
     await event_bus.publish(message.agent_id, {
         "message_id": delivery.message_id,
@@ -213,7 +223,7 @@ async def report_action(
         "button_id": delivery.button_id,
         "button_label": delivery.button_label,
         "category_id": message.category_id,
-        "data": message.data,
+        "data": parsed_data,
         "replied_at": delivery.created_at.isoformat(),
     })
 
@@ -332,6 +342,12 @@ async def defer_all_unread(
         session.commit()
         session.refresh(delivery)
         background_tasks.add_task(deliver_webhook, delivery.id)
+        parsed_data = {}
+        if m.data:
+            try:
+                parsed_data = json.loads(m.data)
+            except (json.JSONDecodeError, TypeError):
+                parsed_data = {}
         await event_bus.publish(agent_id, {
             "message_id": delivery.message_id,
             "user_key": user.user_key,
@@ -339,7 +355,7 @@ async def defer_all_unread(
             "button_id": "later",
             "button_label": "稍后再说",
             "category_id": m.category_id,
-            "data": m.data,
+            "data": parsed_data,
             "replied_at": delivery.created_at.isoformat(),
         })
         deferred += 1

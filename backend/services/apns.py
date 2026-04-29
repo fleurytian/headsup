@@ -88,7 +88,7 @@ async def send_silent_push(device_token: str, custom_data: Optional[dict] = None
         return False, f"apns_config_error: {e}"
 
     host = APNS_HOST_PROD if settings.apns_production else APNS_HOST_DEV
-    url = f"{host}/3/device/{device_token}"
+    apns_endpoint = f"{host}/3/device/{device_token}"
 
     payload = {"aps": {"content-available": 1}}
     if custom_data:
@@ -104,7 +104,7 @@ async def send_silent_push(device_token: str, custom_data: Optional[dict] = None
 
     try:
         async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
-            resp = await client.post(url, content=json.dumps(payload), headers=headers)
+            resp = await client.post(apns_endpoint, content=json.dumps(payload), headers=headers)
             if resp.status_code == 200:
                 return True, "ok"
             return False, resp.json().get("reason", "unknown") if resp.content else "empty"
@@ -138,7 +138,7 @@ async def send_push(
         return False, f"apns_config_error: {e}"
 
     host = APNS_HOST_PROD if settings.apns_production else APNS_HOST_DEV
-    url = f"{host}/3/device/{device_token}"
+    apns_endpoint = f"{host}/3/device/{device_token}"
 
     title = strip_markdown(title)
     body = strip_markdown(body)
@@ -207,7 +207,7 @@ async def send_push(
 
     try:
         async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
-            resp = await client.post(url, content=json.dumps(payload), headers=headers)
+            resp = await client.post(apns_endpoint, content=json.dumps(payload), headers=headers)
             if resp.status_code == 200:
                 return True, "ok"
             error = resp.json().get("reason", "unknown") if resp.content else "empty"
