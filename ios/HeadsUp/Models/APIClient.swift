@@ -112,4 +112,7 @@ final class APIClient {
 
 extension Notification.Name {
     static let headsupSessionInvalid = Notification.Name("headsupSessionInvalid")
+    /// Posted when push history likely changed (incoming push, or user tapped
+    /// an action). Views showing history should reload.
+    static let headsupHistoryChanged = Notification.Name("headsupHistoryChanged")
 }

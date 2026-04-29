@@ -82,6 +82,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler:
             @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // A new push arrived — any history view on screen should refresh now.
+        NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
         completionHandler([.banner, .sound, .badge])
     }
 
@@ -116,6 +118,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 withIdentifiers: [originalNotificationId]
             )
             _ = await Self.reportAction(messageId: messageId, buttonId: buttonId, buttonLabel: label)
+            // The user just responded — bump any history view on screen.
+            await MainActor.run {
+                NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
+            }
             completionHandler()
         }
     }

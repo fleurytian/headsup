@@ -121,27 +121,20 @@ struct AgentDetailView: View {
         .navigationTitle("")
         .toolbarBackground(HU.C.bg, for: .navigationBar)
         .refreshable { await loadHistory() }
-        .task { await pollLoop() }
+        .task { await loadHistory() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             Task { await loadHistory() }
         }
-    }
-
-    /// Background poll while this screen is visible. .task is cancelled when
-    /// the view disappears, so this stops automatically.
-    private func pollLoop() async {
-        await loadHistory()
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
-            if Task.isCancelled { return }
-            await loadHistory()
+        // Refresh whenever a new push arrives or the user taps a button.
+        .onReceive(NotificationCenter.default.publisher(for: .headsupHistoryChanged)) { _ in
+            Task { await loadHistory() }
         }
     }
 
     private func loadHistory() async {
         guard let session = auth.session else { return }
-        // Don't show the spinner on background polls — only on the first load
-        // (when history is still empty). Otherwise the screen flashes.
+        // Spinner only on the very first load — silent on event-driven refreshes
+        // so the screen doesn't flash.
         if history.isEmpty { loading = true }
         defer { loading = false }
         do {
@@ -151,7 +144,6 @@ struct AgentDetailView: View {
             )
             self.history = result
         } catch {
-            // Silent on background polls — only set error if user-visible
             if history.isEmpty { self.error = error.localizedDescription }
         }
     }
