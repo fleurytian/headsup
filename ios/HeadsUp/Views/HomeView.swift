@@ -172,6 +172,7 @@ struct EmptyAgentsView: View {
     @Binding var showAddAgent: Bool
     @EnvironmentObject var deepLink: DeepLinkHandler
     @EnvironmentObject var loc: Localizer
+    @EnvironmentObject var auth: AuthService
     @State private var copiedInstruction = false
 
     private var instructionZH: String {
@@ -268,6 +269,22 @@ struct EmptyAgentsView: View {
 
                 PrimaryButton(title: T("我已经有授权链接", "I have an authorization link"), icon: "arrow.right") {
                     showAddAgent = true
+                }
+                .padding(.horizontal, 32)
+
+                Spacer().frame(height: 24)
+
+                // Did you authorize before but see nothing? Most likely a session
+                // mismatch after a server change. Make the recovery path obvious.
+                VStack(alignment: .leading, spacing: 6) {
+                    LText("已经授权过却看不到? 重新登录一次。",
+                          "Authorized before but seeing nothing? Sign out and back in.")
+                        .font(HU.small()).foregroundStyle(HU.C.muted)
+                    Button { auth.signOut() } label: {
+                        Text(T("登出", "Sign out"))
+                            .font(HU.small(.semibold))
+                            .foregroundStyle(HU.C.accent)
+                    }
                 }
                 .padding(.horizontal, 32)
 
