@@ -180,6 +180,10 @@ async def push(
 
     user = _get_active_user(req.user_key, agent.id, session)
 
+    # Default the notification image to the agent's logo so pushes carry the
+    # agent's identity. Agents can override per-push via image_url.
+    image_url = req.image_url or agent.logo_url
+
     message = PushMessage(
         external_id=req.message_id,
         agent_id=agent.id,
@@ -187,7 +191,7 @@ async def push(
         title=req.title,
         body=req.body,
         subtitle=req.subtitle,
-        image_url=req.image_url,
+        image_url=image_url,
         level=req.level,
         sound=req.sound,
         badge=req.badge,
@@ -283,21 +287,38 @@ def list_messages(
 def list_responses(
     agent: Agent = Depends(get_current_agent),
     session: Session = Depends(get_session),
-    since: Optional[float] = None,           # unix timestamp
-    message_id: Optional[str] = None,        # filter to one message
+    since: Optional[str] = None,             # ISO-8601 string OR unix-seconds (float/int)
+    message_id: Optional[str] = None,        # filter to one specific message
     limit: int = 50,
 ):
     """Poll for button-tap responses. Local agents use this when they can't host a webhook.
 
-    `since` (unix ts) filters to deliveries newer than that time.
-    `message_id` filters to one specific message.
+    `since` accepts either:
+      - ISO-8601, e.g. `2026-04-29T00:00:00Z` or `2026-04-29T00:00:00+00:00`
+      - Unix seconds, e.g. `1777434800` (cursor-style; advance after each batch)
+    `message_id` filters to one specific message (use this to wait on one push).
     """
     from datetime import datetime as _dt
     from models import WebhookDelivery
 
     q = select(WebhookDelivery).where(WebhookDelivery.agent_id == agent.id)
     if since is not None:
-        q = q.where(WebhookDelivery.created_at > _dt.utcfromtimestamp(since))
+        try:
+            # ISO-8601 first; tolerate trailing Z by mapping to +00:00
+            cutoff = _dt.fromisoformat(since.replace("Z", "+00:00"))
+            # naive vs aware: if aware, drop tzinfo to match WebhookDelivery.created_at (UTC, naive)
+            if cutoff.tzinfo is not None:
+                cutoff = cutoff.astimezone(tz=None).replace(tzinfo=None)
+        except ValueError:
+            try:
+                cutoff = _dt.utcfromtimestamp(float(since))
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "INVALID_SINCE",
+                            "message": "since must be ISO-8601 or unix seconds"},
+                )
+        q = q.where(WebhookDelivery.created_at > cutoff)
     if message_id is not None:
         q = q.where(WebhookDelivery.message_id == message_id)
 
