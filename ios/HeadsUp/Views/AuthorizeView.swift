@@ -173,6 +173,15 @@ struct AuthorizeView: View {
             await PushService.shared.refreshCategories()
             await sendTutorialPush()
             done = true
+        } catch APIError.http(410, _) {
+            self.error = T("授权链接已过期。让 agent 重新发一个给你。",
+                           "This authorization link has expired. Ask the agent to send a fresh one.")
+        } catch APIError.http(404, _) {
+            self.error = T("链接已被使用过或无效。让 agent 重新发一个。",
+                           "Link already used or invalid. Ask the agent to send a fresh one.")
+        } catch APIError.http(401, _), APIError.http(403, _) {
+            self.error = T("登录过期了,请回到主页重新登录后再试。",
+                           "Your sign-in expired — sign in again on the home screen, then retry.")
         } catch {
             self.error = error.localizedDescription
         }

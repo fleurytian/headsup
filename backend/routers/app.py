@@ -30,6 +30,7 @@ from models import (
     PushMessage,
     WebhookDelivery,
 )
+from services import event_bus
 from services.apple_signin import verify_identity_token
 from services.webhook import deliver_webhook
 
@@ -137,9 +138,9 @@ def confirm_authorization(
     ).first()
 
     if not auth_req:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        raise HTTPException(status_code=404, detail="Authorization link is invalid (already used or never existed)")
     if auth_req.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Token expired")
+        raise HTTPException(status_code=410, detail="Authorization link expired — ask the agent to send a fresh one")
 
     existing = session.exec(
         select(AgentUserBinding).where(
@@ -203,6 +204,18 @@ async def report_action(
     session.refresh(delivery)
 
     background_tasks.add_task(deliver_webhook, delivery.id)
+
+    # Notify any open SSE streams for this agent — replaces the polling tax.
+    await event_bus.publish(message.agent_id, {
+        "message_id": delivery.message_id,
+        "user_key": user.user_key,
+        "agent_id": message.agent_id,
+        "button_id": delivery.button_id,
+        "button_label": delivery.button_label,
+        "category_id": message.category_id,
+        "data": message.data,
+        "replied_at": delivery.created_at.isoformat(),
+    })
 
     return {"status": "received"}
 
@@ -323,6 +336,41 @@ def me(user: AppUser = Depends(get_authed_user)):
         "mute_until": user.mute_until,
         "has_device_token": bool(user.apns_device_token),
     }
+
+
+@router.delete("/me", status_code=204)
+def delete_me(
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Permanently delete the user and all their data.
+
+    App Store guideline 5.1.1(v) — apps that let people create accounts must let
+    people delete them. Cascades:
+      - all bindings (so agents can no longer push to this user)
+      - all push messages and webhook deliveries (history wiped)
+      - the user row itself
+    The user can later sign in with the same Apple ID and start fresh.
+    """
+    user_id = user.id
+    # 1. webhook deliveries
+    for d in session.exec(
+        select(WebhookDelivery).where(WebhookDelivery.user_key == user.user_key)
+    ).all():
+        session.delete(d)
+    # 2. push messages
+    for m in session.exec(
+        select(PushMessage).where(PushMessage.user_id == user_id)
+    ).all():
+        session.delete(m)
+    # 3. bindings
+    for b in session.exec(
+        select(AgentUserBinding).where(AgentUserBinding.user_id == user_id)
+    ).all():
+        session.delete(b)
+    # 4. user
+    session.delete(user)
+    session.commit()
 
 
 # ── Per-user push history ────────────────────────────────────────────────────

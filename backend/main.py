@@ -253,3 +253,85 @@ _LANDING_HTML = """<!doctype html>
 @api.get("/", response_class=HTMLResponse, include_in_schema=False)
 def landing():
     return _LANDING_HTML
+
+
+_PRIVACY_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · HeadsUp</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    max-width: 640px; margin: 0 auto; padding: 56px 24px 80px;
+    color: #1A1818; background: #FFFDF8; line-height: 1.6; }
+  h1 { font-size: 28px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.3px; }
+  h2 { font-size: 17px; margin-top: 36px; margin-bottom: 6px; }
+  p, li { font-size: 15px; color: #2a2727; }
+  a { color: #6B60A8; }
+  .meta { color: #8B8580; font-size: 13px; margin-bottom: 32px; }
+  ul { padding-left: 18px; }
+  hr { border: 0; border-top: 1px solid #E8E2D5; margin: 36px 0; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy</h1>
+<p class="meta">HeadsUp · Last updated 2026-04-29</p>
+
+<p>HeadsUp is a notification delivery service. We collect only what we need to
+deliver pushes from agents you authorize, and to recognize you across sessions.</p>
+
+<h2>What we collect</h2>
+<ul>
+  <li><strong>Apple ID identifier (subject claim)</strong> — when you sign in with
+  Apple. We do not see your Apple email or name unless you choose to share them.</li>
+  <li><strong>APNs device token</strong> — needed to deliver push notifications
+  to your iPhone. Provided by Apple, opaque to us.</li>
+  <li><strong>Bindings</strong> — which agents you've authorized.</li>
+  <li><strong>Push history</strong> — title/body of pushes sent to you and
+  which button you tapped, kept so you can review past actions in the app.</li>
+</ul>
+
+<h2>What we don't collect</h2>
+<ul>
+  <li>Contacts, photos, microphone, location, calendar, or anything else on
+  your device that we don't have a stated reason to use.</li>
+  <li>The content of messages on other apps. HeadsUp can't see them.</li>
+  <li>We do not sell or share your data with advertisers.</li>
+</ul>
+
+<h2>Who sees your data</h2>
+<p>An agent you authorize sees only what they sent you and which button you
+tapped on their notifications. They do not see other agents you've authorized,
+your Apple ID, or your device token.</p>
+
+<h2>Where data lives</h2>
+<p>HeadsUp servers run on commercial cloud infrastructure (currently Aliyun
+Hong Kong). Data is encrypted in transit (TLS 1.2+) and at rest.</p>
+
+<h2>Retention &amp; deletion</h2>
+<p>You can revoke any agent at any time from the home screen (swipe left).
+You can permanently delete your account and all associated data from
+Settings &rarr; Delete account. Deletion is immediate and cannot be undone;
+there is no waiting period and no soft-delete copy retained.</p>
+
+<h2>Children</h2>
+<p>HeadsUp is not directed to children under 13.</p>
+
+<h2>Changes</h2>
+<p>If we change this policy materially we'll notify you in-app before the
+change takes effect.</p>
+
+<h2>Contact</h2>
+<p><a href="mailto:hi@headsup.md">hi@headsup.md</a></p>
+
+<hr>
+<p style="color:#8B8580;font-size:13px"><a href="/">&larr; back to headsup.md</a></p>
+</body>
+</html>
+"""
+
+
+@api.get("/privacy", response_class=HTMLResponse, include_in_schema=False)
+def privacy():
+    return _PRIVACY_HTML

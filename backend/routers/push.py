@@ -322,6 +322,48 @@ def list_responses(
     ]
 
 
+@router.get("/responses/stream")
+async def responses_stream(agent: Agent = Depends(get_current_agent)):
+    """Server-Sent Events stream — replaces polling.
+
+    Local agents (no public webhook) connect once with their api key and stay
+    on a long HTTP connection. When the user taps a button on any of this
+    agent's pushes, a `data: {...}` line is yielded immediately.
+
+    Each event is the same shape as a webhook: message_id, user_key, button_id,
+    button_label, category_id, data, replied_at (ISO-8601).
+    """
+    from services import event_bus
+    from fastapi.responses import StreamingResponse
+
+    queue = event_bus.subscribe(agent.id)
+
+    async def gen():
+        # ask EventSource clients to retry after 5s if the connection drops
+        yield "retry: 5000\n\n"
+        # initial comment so curl/proxies flush headers immediately
+        yield ": connected\n\n"
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"      # keep idle proxies happy
+        finally:
+            event_bus.unsubscribe(agent.id, queue)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disable nginx buffering
+            "Connection": "keep-alive",
+        },
+    )
+
+
 @router.get("/messages/{message_id}", response_model=MessageResponse)
 def get_message(
     message_id: str,

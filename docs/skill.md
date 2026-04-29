@@ -67,9 +67,9 @@ Then push using `"category_id": "pay_or_wait"`. Created/updated categories sync 
 
 `icon` accepts SF Symbol names (https://developer.apple.com/sf-symbols/). Optional.
 
-### Receive the user's tap
+### Receive the user's tap — two ways
 
-You configured a webhook URL when you registered. We POST to it when the user taps:
+**A. Webhook (push to you)** — set when you register; we POST when the user taps:
 
 ```http
 POST your-webhook-url
@@ -85,6 +85,33 @@ X-Webhook-Signature: sha256=...   // HMAC-SHA256 of body using your api_key
   "timestamp":    1714291200
 }
 ```
+
+Retried 5s / 30s / 5min / 30min on non-2xx.
+
+**B. SSE stream (recommended for local agents)** — open one long HTTP connection, get pushed events with no polling:
+
+```http
+GET /v1/responses/stream
+X-API-Key: pk_xxx
+Accept: text/event-stream
+→ ": connected"
+  "data: {\"message_id\":\"uuid\",\"button_id\":\"pay\",...}"
+  ": ping"     ← keep-alive every 20s
+  "data: {...}"
+```
+
+Connect once, leave it open. Reconnect on disconnect. Works through any firewall (just outbound HTTPS). Same event shape as webhook minus `X-Webhook-Signature`.
+
+**C. Polling (fallback)** — if SSE isn't available in your stack:
+
+```http
+GET /v1/responses?since=2026-04-29T00:00:00Z[&message_id=uuid]
+X-API-Key: pk_xxx
+```
+
+Use `since=` for incremental pulls (advance to the latest `replied_at` after each response). Use `message_id=` to wait on **one specific** push. Recommended cadence: 1-2s while waiting on a specific message, otherwise 5-10s background.
+
+The Python SDK's `bot.ask()` wraps SSE with polling fallback — `ask()` sends, blocks until response arrives, returns.
 
 ### Onboarding a new user
 
@@ -119,12 +146,17 @@ Need it logged + retried if they're offline?
 
 ## Common errors
 
-| Code | What it means | Action |
-|---|---|---|
-| `USER_NOT_BOUND` | User hasn't authorized this agent | Send them the auth link |
-| `USER_NO_DEVICE` | User signed in but hasn't registered an APNs device | Wait or remind them to open the app |
-| `INVALID_CATEGORY` | Unknown `category_id` | Check spelling or create the category first |
-| `WEBHOOK_CONFIG_MISSING` | You didn't set a webhook URL | Set it in your dashboard |
+Errors come back as `{"detail": {"code": "...", "message": "...", "solution"?: "..."}}`.
+
+| Code | HTTP | What it means | Action |
+|---|---|---|---|
+| `USER_NOT_FOUND` | 404 | `user_key` doesn't exist | Check the key the user gave you |
+| `USER_NOT_BOUND` | 400 | User hasn't authorized this agent | Send them your auth link from `/authorize/initiate` |
+| `USER_NO_DEVICE` | 400 | User signed in but no APNs device yet | Ask them to open the app once |
+| `USER_MUTED` | 429 | User has DND on; push won't deliver until expiry | Retry after `mute_until` |
+| `INVALID_CATEGORY` | 400 | Unknown `category_id` | Use a built-in or create the category first |
+| `TITLE_TOO_LONG` / `BODY_TOO_LONG` / `SUBTITLE_TOO_LONG` | 400 | Length cap exceeded | See limits below; truncate before sending |
+| `INVALID_IMAGE_URL` | 400 | image_url not http(s) or too long | Provide an absolute URL, ≤ 200 chars |
 
 ## Limits
 

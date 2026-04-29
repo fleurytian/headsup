@@ -204,14 +204,14 @@ struct EmptyAgentsView: View {
 
                 VStack(alignment: .leading, spacing: 22) {
                     StepLine(num: "01",
-                             zh: "把 headsup.md/skill.md 给你的 AI 助手读一下",
-                             en: "Hand headsup.md/skill.md to your agent")
+                             zh: "让你的 AI 读一下 https://headsup.md/skill.md",
+                             en: "Have your agent read https://headsup.md/skill.md")
                     StepLine(num: "02",
-                             zh: "它会发一个 headsup:// 授权链接给你",
-                             en: "It sends you a headsup:// authorization link")
+                             zh: "它会注册账号,然后发一个授权链接给你",
+                             en: "It registers itself, then sends you an authorization link")
                     StepLine(num: "03",
-                             zh: "你点链接 → 在 App 里授权 → 完成",
-                             en: "Tap the link → authorize in app → done")
+                             zh: "你点链接 → 在这里授权 → 它就能给你发推送了",
+                             en: "Tap the link → authorize here → it can now send you pushes")
                 }
                 .padding(.horizontal, 32)
 

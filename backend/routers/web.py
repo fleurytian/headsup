@@ -22,7 +22,7 @@ from models import (
 router = APIRouter(tags=["web"])
 templates = Jinja2Templates(directory="templates")
 
-AUTH_TOKEN_TTL_MINUTES = 5
+AUTH_TOKEN_TTL_MINUTES = 30
 
 
 # ── Authorization flow ────────────────────────────────────────────────────────

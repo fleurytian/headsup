@@ -11,6 +11,9 @@ struct SettingsView: View {
     @State private var muteUntil: Date?
     @State private var muteLoading = false
     @State private var permissionStatus: UNAuthorizationStatus = .notDetermined
+    @State private var showDeleteConfirm = false
+    @State private var deleting = false
+    @State private var deleteError: String?
 
     var body: some View {
         ZStack {
@@ -129,6 +132,23 @@ struct SettingsView: View {
                         .card()
                     }
 
+                    SettingsSection(title: "about") {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Link(destination: URL(string: "https://headsup.md/privacy")!) {
+                                HStack {
+                                    LText("隐私政策", "Privacy Policy")
+                                        .font(HU.body()).foregroundStyle(HU.C.ink)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(HU.C.muted)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                        }
+                        .card()
+                    }
+
                     Button(role: .destructive) {
                         auth.signOut()
                     } label: {
@@ -142,6 +162,29 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
+
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            LText("删除账号", "Delete account")
+                                .font(HU.small(.medium))
+                                .foregroundStyle(HU.C.muted)
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .disabled(deleting)
+
+                    if let deleteError = deleteError {
+                        Text(deleteError)
+                            .font(HU.small())
+                            .foregroundStyle(HU.C.accent)
+                            .padding(.horizontal, 20)
+                    }
 
                     Spacer().frame(height: 40)
                 }
@@ -160,6 +203,29 @@ struct SettingsView: View {
         .task {
             await refreshPermission()
             await refreshMute()
+        }
+        .alert(T("删除账号?", "Delete account?"), isPresented: $showDeleteConfirm) {
+            Button(T("取消", "Cancel"), role: .cancel) {}
+            Button(T("永久删除", "Delete permanently"), role: .destructive) {
+                Task { await deleteAccount() }
+            }
+        } message: {
+            LText(
+                "这会永久删除你的账号、所有 agent 授权、推送历史。无法恢复。",
+                "This permanently removes your account, every agent authorization, and your push history. Cannot be undone."
+            )
+        }
+    }
+
+    private func deleteAccount() async {
+        guard let session = auth.session else { return }
+        deleting = true
+        defer { deleting = false }
+        do {
+            try await APIClient.shared.delete("/v1/app/me", sessionToken: session.sessionToken)
+            auth.signOut()
+        } catch {
+            deleteError = error.localizedDescription
         }
     }
 

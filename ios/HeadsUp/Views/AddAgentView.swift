@@ -97,11 +97,11 @@ struct AddAgentView: View {
                             .padding(.leading, 38)
 
                             StepRow(num: "02",
-                                    zh: "Agent 自己注册账号,把 headsup:// 链接发给你",
-                                    en: "Agent registers itself and sends you a headsup:// link")
+                                    zh: "Agent 注册账号后,会发一个授权链接给你(headsup:// 或 https://headsup.md/authorize 都行)",
+                                    en: "Once registered, the agent sends you an authorization link (either a headsup:// deep link or an https://headsup.md/authorize URL)")
                             StepRow(num: "03",
-                                    zh: "点链接 → Safari → 「Open in HeadsUp」会跳回这里授权",
-                                    en: "Tap link → Safari → 'Open in HeadsUp' brings you back here")
+                                    zh: "Safari 里点开 → 跳回这里授权,或直接把链接粘到上面的输入框",
+                                    en: "Tap it in Safari to come back here, or paste the link into the field above")
                         }
                         .padding(.horizontal, 24)
 
