@@ -132,6 +132,23 @@ struct SettingsView: View {
                         .card()
                     }
 
+                    SettingsSection(title: "you") {
+                        VStack(alignment: .leading, spacing: 0) {
+                            NavigationLink(destination: BadgesView()) {
+                                settingsRow(zh: "徽章", en: "Badges", icon: "rosette")
+                            }
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            NavigationLink(destination: MyDataView()) {
+                                settingsRow(zh: "我的数据", en: "Your Data", icon: "chart.bar.fill")
+                            }
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            NavigationLink(destination: DiagnoseView()) {
+                                settingsRow(zh: "诊断", en: "Diagnose", icon: "stethoscope")
+                            }
+                        }
+                        .card()
+                    }
+
                     SettingsSection(title: "about") {
                         VStack(alignment: .leading, spacing: 0) {
                             SettingsKeyValue(key: "version", value: HU.versionString)
@@ -233,7 +250,10 @@ struct SettingsView: View {
             await refreshMute()
         }
         .alert(T("删除账号?", "Delete account?"), isPresented: $showDeleteConfirm) {
-            Button(T("取消", "Cancel"), role: .cancel) {}
+            Button(T("取消", "Cancel"), role: .cancel) {
+                // Cold Feet badge — they thought about it, didn't do it.
+                Task { await coldFeet() }
+            }
             Button(T("永久删除", "Delete permanently"), role: .destructive) {
                 Task { await deleteAccount() }
             }
@@ -255,6 +275,17 @@ struct SettingsView: View {
         } catch {
             deleteError = error.localizedDescription
         }
+    }
+
+    private func coldFeet() async {
+        guard let session = auth.session else { return }
+        struct Empty: Encodable {}
+        struct R: Decodable {}
+        do {
+            let _: R = try await APIClient.shared.post(
+                "/v1/app/me/cold-feet", body: Empty(), sessionToken: session.sessionToken
+            )
+        } catch {}
     }
 
     private var permissionLabel: String {
@@ -293,6 +324,19 @@ struct SettingsView: View {
             self.muteUntil = resp.mute_until
         } catch {}
     }
+}
+
+/// Tappable nav row used by the You / About sections.
+@ViewBuilder
+fileprivate func settingsRow(zh: String, en: String, icon: String) -> some View {
+    HStack(spacing: 12) {
+        Image(systemName: icon).font(.callout).foregroundStyle(HU.C.accent).frame(width: 22)
+        LText(zh, en).font(HU.body()).foregroundStyle(HU.C.ink)
+        Spacer()
+        Image(systemName: "chevron.right").font(.caption.weight(.medium)).foregroundStyle(HU.C.muted.opacity(0.7))
+    }
+    .padding(.horizontal, 16).padding(.vertical, 14)
+    .contentShape(Rectangle())
 }
 
 private struct SettingsSection<Content: View>: View {
