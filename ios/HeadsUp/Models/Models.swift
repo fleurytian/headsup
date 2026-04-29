@@ -18,6 +18,7 @@ struct AgentBinding: Codable, Identifiable {
     let agentDescription: String?
     let agentType: String?
     let lastMessageAt: Date?
+    let lastMessageTitle: String?
     let unreadCount: Int?
 
     var id: String { agentId }
@@ -30,6 +31,7 @@ struct AgentBinding: Codable, Identifiable {
         case agentDescription = "agent_description"
         case agentType = "agent_type"
         case lastMessageAt = "last_message_at"
+        case lastMessageTitle = "last_message_title"
         case unreadCount = "unread_count"
     }
 }

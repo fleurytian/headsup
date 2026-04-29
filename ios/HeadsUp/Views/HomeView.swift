@@ -10,6 +10,9 @@ struct HomeView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var showAddAgent = false
+    @State private var todayStats: TodayStats? = nil
+    @State private var clipboardLink: String? = nil
+    @State private var hasEverAuthorized = false  // for empty-state branching
 
     var body: some View {
         NavigationStack {
@@ -17,16 +20,26 @@ struct HomeView: View {
                 HU.C.bg.ignoresSafeArea()
 
                 if bindings.isEmpty && !loading {
-                    EmptyAgentsView(showAddAgent: $showAddAgent)
+                    EmptyAgentsView(showAddAgent: $showAddAgent,
+                                    hasEverAuthorized: hasEverAuthorized)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             ForEach(status.activeIssues, id: \.self) { issue in
                                 StatusBanner(issue: issue).padding(.horizontal, 16)
                             }
-                            HStack {
+                            if let link = clipboardLink {
+                                ClipboardDetectCard(link: link, dismiss: { clipboardLink = nil })
+                                    .padding(.horizontal, 16)
+                            }
+                            HStack(alignment: .firstTextBaseline) {
                                 Eyebrow(text: "agents · \(bindings.count)")
                                 Spacer()
+                                if let s = todayStats {
+                                    Text(todaySummary(s))
+                                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(HU.C.muted)
+                                }
                             }
                             .padding(.horizontal, 24)
 
@@ -127,9 +140,62 @@ struct HomeView: View {
                 sessionToken: session.sessionToken
             )
             self.bindings = result
+            if !result.isEmpty { hasEverAuthorized = true }
         } catch {
             self.error = error.localizedDescription
         }
+        await loadTodayStats()
+        checkClipboard()
+    }
+
+    private func loadTodayStats() async {
+        guard let session = auth.session else { return }
+        do {
+            let s: TodayStats = try await APIClient.shared.get(
+                "/v1/app/me/stats", sessionToken: session.sessionToken
+            )
+            self.todayStats = s
+        } catch {}
+    }
+
+    /// If the user just copied an authorize link in Safari, surface it the
+    /// moment they land on home. UIPasteboard reads cost a "pasted from X"
+    /// system toast — we only check on app foreground / view appear, not
+    /// continuously.
+    private func checkClipboard() {
+        let pb = UIPasteboard.general
+        guard pb.hasStrings || pb.hasURLs else { clipboardLink = nil; return }
+        let candidate: String? = {
+            if let url = pb.url, url.scheme == "headsup" || url.host?.hasSuffix("headsup.md") == true {
+                return url.absoluteString
+            }
+            if let s = pb.string,
+               s.lowercased().hasPrefix("headsup://authorize")
+                || s.lowercased().hasPrefix("https://headsup.md/authorize") {
+                return s
+            }
+            return nil
+        }()
+        clipboardLink = candidate
+    }
+
+    private func todaySummary(_ s: TodayStats) -> String {
+        let lang = loc.lang
+        let parts: [String]
+        if lang == .zh {
+            parts = [
+                "今日 \(s.received_today)",
+                "已回 \(s.replied_today)",
+                s.unread_total > 0 ? "待回 \(s.unread_total)" : "全清"
+            ]
+        } else {
+            parts = [
+                "\(s.received_today) today",
+                "\(s.replied_today) replied",
+                s.unread_total > 0 ? "\(s.unread_total) pending" : "all clear"
+            ]
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func revoke(_ agent: AgentBinding) async {
@@ -190,6 +256,13 @@ private struct AgentRow: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(binding.agentName).font(HU.body(.medium)).foregroundStyle(HU.C.ink)
+                if let title = binding.lastMessageTitle, !title.isEmpty {
+                    Text(title)
+                        .font(HU.small())
+                        .foregroundStyle(HU.C.ink.opacity(0.7))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 Text(subtitle).font(HU.small()).foregroundStyle(HU.C.muted)
             }
             Spacer()
@@ -289,8 +362,56 @@ struct StatusBanner: View {
     }
 }
 
+/// Plain-data shape returned by /v1/app/me/stats.
+struct TodayStats: Codable {
+    let received_today: Int
+    let replied_today: Int
+    let unread_total: Int
+}
+
+/// One-line card: "We saw a `headsup://authorize?...` in your clipboard. Open it?"
+struct ClipboardDetectCard: View {
+    let link: String
+    let dismiss: () -> Void
+    @EnvironmentObject var deepLink: DeepLinkHandler
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "link").font(.callout).foregroundStyle(HU.C.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                LText("剪贴板有授权链接", "Authorize link in clipboard")
+                    .font(HU.small(.semibold)).foregroundStyle(HU.C.ink)
+                Text(link.prefix(60) + (link.count > 60 ? "…" : ""))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(HU.C.muted)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button {
+                if let url = URL(string: link) {
+                    deepLink.handle(url: url)
+                }
+                dismiss()
+            } label: {
+                Text(T("打开", "Open"))
+                    .font(HU.small(.semibold)).foregroundStyle(HU.C.bg)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Capsule().fill(HU.C.ink))
+            }
+            Button(action: dismiss) {
+                Image(systemName: "xmark").font(.caption2).foregroundStyle(HU.C.muted)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(HU.C.accent.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(HU.C.accent.opacity(0.4), lineWidth: 1))
+    }
+}
+
 struct EmptyAgentsView: View {
     @Binding var showAddAgent: Bool
+    var hasEverAuthorized: Bool = false
     @EnvironmentObject var deepLink: DeepLinkHandler
     @EnvironmentObject var loc: Localizer
     @EnvironmentObject var auth: AuthService
@@ -328,74 +449,90 @@ struct EmptyAgentsView: View {
 
                 Spacer().frame(height: 18)
 
-                LText("等一个 heads up。", "Get a heads up.")
-                    .font(.system(size: 28, weight: .heavy, design: .rounded))
-                    .foregroundStyle(HU.C.ink)
+                if hasEverAuthorized {
+                    LText("一个都没了。", "All clear.")
+                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .foregroundStyle(HU.C.ink)
+                        .padding(.horizontal, 32)
+                    Spacer().frame(height: 8)
+                    LText(
+                        "你撤销了所有 agent。再绑一个,或者收到新链接时直接粘到下面。",
+                        "You revoked every agent. Add one again, or paste a new authorization link below."
+                    )
+                    .font(HU.body())
+                    .foregroundStyle(HU.C.muted)
+                    .lineSpacing(4)
                     .padding(.horizontal, 32)
-
-                Spacer().frame(height: 8)
-
-                LText(
-                    "AI agent 想给你发通知时,会发一个授权链接给你。点开它,就能在通知栏跟你说话。",
-                    "When your AI wants to message you, it sends you a link. Tap it once to authorize, and it can find you right in the notification bar."
-                )
-                .font(HU.body())
-                .foregroundStyle(HU.C.muted)
-                .lineSpacing(4)
-                .padding(.horizontal, 32)
+                } else {
+                    LText("等一个 heads up。", "Get a heads up.")
+                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .foregroundStyle(HU.C.ink)
+                        .padding(.horizontal, 32)
+                    Spacer().frame(height: 8)
+                    LText(
+                        "AI agent 想给你发通知时,会发一个授权链接给你。点开它,就能在通知栏跟你说话。",
+                        "When your AI wants to message you, it sends you a link. Tap it once to authorize, and it can find you right in the notification bar."
+                    )
+                    .font(HU.body())
+                    .foregroundStyle(HU.C.muted)
+                    .lineSpacing(4)
+                    .padding(.horizontal, 32)
+                }
 
                 Spacer().frame(height: 36)
 
-                VStack(alignment: .leading, spacing: 22) {
-                    StepLine(num: "01",
-                             zh: "把这一整段指令发给你的 AI:",
-                             en: "Paste this whole instruction to your AI:")
-                }
-                .padding(.horizontal, 32)
-
-                Spacer().frame(height: 14)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    LText(instructionZH, instructionEN)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(HU.C.ink)
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(HU.C.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(HU.C.line, lineWidth: 1)
-                        )
-                    Button {
-                        UIPasteboard.general.string = loc.lang == .zh ? instructionZH : instructionEN
-                        copiedInstruction = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedInstruction = false }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: copiedInstruction ? "checkmark" : "doc.on.doc")
-                                .font(.caption.weight(.medium))
-                            Text(copiedInstruction ? T("已复制", "Copied") : T("复制完整指令", "Copy full instruction"))
-                                .font(HU.small(.semibold))
-                        }
-                        .foregroundStyle(HU.C.bg)
-                        .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(Capsule().fill(HU.C.ink))
+                if !hasEverAuthorized {
+                    VStack(alignment: .leading, spacing: 22) {
+                        StepLine(num: "01",
+                                 zh: "把这一整段指令发给你的 AI:",
+                                 en: "Paste this whole instruction to your AI:")
                     }
-                }
-                .padding(.horizontal, 32)
+                    .padding(.horizontal, 32)
 
-                Spacer().frame(height: 28)
+                    Spacer().frame(height: 14)
 
-                VStack(alignment: .leading, spacing: 22) {
-                    StepLine(num: "02",
-                             zh: "它会注册账号,然后发一个授权链接给你",
-                             en: "It registers itself, then sends you an authorization link")
-                    StepLine(num: "03",
-                             zh: "你点链接 → 在这里授权 → 它就能给你发推送了",
-                             en: "Tap the link → authorize here → it can now send you pushes")
+                    VStack(alignment: .leading, spacing: 10) {
+                        LText(instructionZH, instructionEN)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(HU.C.ink)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(HU.C.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(HU.C.line, lineWidth: 1)
+                            )
+                        Button {
+                            UIPasteboard.general.string = loc.lang == .zh ? instructionZH : instructionEN
+                            copiedInstruction = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedInstruction = false }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: copiedInstruction ? "checkmark" : "doc.on.doc")
+                                    .font(.caption.weight(.medium))
+                                Text(copiedInstruction ? T("已复制", "Copied") : T("复制完整指令", "Copy full instruction"))
+                                    .font(HU.small(.semibold))
+                            }
+                            .foregroundStyle(HU.C.bg)
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(Capsule().fill(HU.C.ink))
+                        }
+                    }
+                    .padding(.horizontal, 32)
+
+                    Spacer().frame(height: 28)
+
+                    VStack(alignment: .leading, spacing: 22) {
+                        StepLine(num: "02",
+                                 zh: "它会注册账号,然后发一个授权链接给你",
+                                 en: "It registers itself, then sends you an authorization link")
+                        StepLine(num: "03",
+                                 zh: "你点链接 → 在这里授权 → 它就能给你发推送了",
+                                 en: "Tap the link → authorize here → it can now send you pushes")
+                    }
+                    .padding(.horizontal, 32)
                 }
-                .padding(.horizontal, 32)
 
                 Spacer().frame(height: 40)
 
