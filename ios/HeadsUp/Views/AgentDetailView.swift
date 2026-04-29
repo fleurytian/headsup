@@ -174,10 +174,23 @@ struct HistoryRow: View {
 
     private var displayedReply: String? { localReply ?? item.button_label }
 
+    private var isInfoOnly: Bool { item.category_id == "info_only" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if showAgentName {
-                Text(item.agent_name).font(HU.eyebrow()).tracking(1.5).foregroundStyle(HU.C.accent)
+            HStack(spacing: 6) {
+                if showAgentName {
+                    Text(item.agent_name).font(HU.eyebrow()).tracking(1.5).foregroundStyle(HU.C.accent)
+                }
+                if isInfoOnly {
+                    Text(T("仅通知", "INFO"))
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(HU.C.muted)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().strokeBorder(HU.C.line, lineWidth: 1))
+                }
+                Spacer()
             }
             Text(item.title).font(HU.body(.semibold)).foregroundStyle(HU.C.ink)
             Text(item.body).font(HU.small()).foregroundStyle(HU.C.muted)
@@ -190,6 +203,9 @@ struct HistoryRow: View {
                     Text("→ \(label)")
                         .font(HU.small(.semibold))
                         .foregroundStyle(HU.C.accent)
+                } else if isInfoOnly {
+                    // info_only doesn't expect a reply — don't say "未响应"
+                    EmptyView()
                 }
             }
             .padding(.top, 2)

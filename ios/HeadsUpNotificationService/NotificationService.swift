@@ -98,42 +98,77 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     /// Build an INSendMessageIntent + donate it, then return the content
-    /// updated from that intent. nil if conversion isn't possible (older iOS,
-    /// missing agent name) — caller falls back to the raw bestAttempt.
+    /// updated from that intent. Mirrors Bark's IconProcessor pattern (which
+    /// does NOT need the com.apple.developer.usernotifications.communication
+    /// entitlement to render the sender avatar):
+    ///   - nickname = title (so the sender label shows the agent name)
+    ///   - two recipients required for subtitle to render — Apple bug
+    ///   - avatar attached via \.speakableGroupName, NOT \.sender
     private func makeCommunication(
         _ content: UNMutableNotificationContent,
         agentName: String?,
         agentId: String?,
         image: INImage?
     ) -> UNNotificationContent? {
-        guard #available(iOS 15.0, *) else { return nil }
-        guard let agentName = agentName, !agentName.isEmpty else { return nil }
+        guard #available(iOSApplicationExtension 15.0, *) else { return nil }
+        guard let image else { return nil }   // no avatar = nothing to show
 
-        let handle = INPersonHandle(value: agentId ?? agentName, type: .unknown)
-        let person = INPerson(
-            personHandle: handle,
-            nameComponents: nil,
-            displayName: agentName,
-            image: image,
+        var nameComponents = PersonNameComponents()
+        // The "sender name" iOS renders next to the avatar. Prefer agent name,
+        // fall back to the notification title.
+        nameComponents.nickname = (agentName?.isEmpty == false ? agentName : content.title) ?? "Agent"
+
+        let avatar = image
+        let senderPerson = INPerson(
+            personHandle: INPersonHandle(value: agentId ?? "", type: .unknown),
+            nameComponents: nameComponents,
+            displayName: nameComponents.nickname,
+            image: avatar,
             contactIdentifier: nil,
-            customIdentifier: agentId
+            customIdentifier: agentId,
+            isMe: false,
+            suggestionType: .none
         )
+        let mePerson = INPerson(
+            personHandle: INPersonHandle(value: "", type: .unknown),
+            nameComponents: nil,
+            displayName: nil,
+            image: nil,
+            contactIdentifier: nil,
+            customIdentifier: nil,
+            isMe: true,
+            suggestionType: .none
+        )
+        // Apple bug: you need TWO non-me recipients (or self+other) for the
+        // subtitle to render in the comm-notification layout. Bark figured
+        // this out — keep both.
+        let placeholderPerson = INPerson(
+            personHandle: INPersonHandle(value: "", type: .unknown),
+            nameComponents: nameComponents,
+            displayName: nameComponents.nickname,
+            image: avatar,
+            contactIdentifier: nil,
+            customIdentifier: nil
+        )
+
         let intent = INSendMessageIntent(
-            recipients: nil,
+            recipients: [mePerson, placeholderPerson],
             outgoingMessageType: .outgoingMessageText,
             content: content.body,
-            speakableGroupName: nil,
-            conversationIdentifier: agentId ?? agentName,
-            serviceName: "HeadsUp",
-            sender: person,
+            speakableGroupName: INSpeakableString(spokenPhrase: content.subtitle),
+            conversationIdentifier: content.threadIdentifier,
+            serviceName: nil,
+            sender: senderPerson,
             attachments: nil
         )
-        if let image { intent.setImage(image, forParameterNamed: \.sender) }
+        // \.speakableGroupName is the right key — \.sender does NOT bind the
+        // avatar to the rendered banner.
+        intent.setImage(avatar, forParameterNamed: \.speakableGroupName)
 
         let interaction = INInteraction(intent: intent, response: nil)
         interaction.direction = .incoming
         interaction.donate(completion: nil)
-        return try? content.updating(from: intent)
+        return try? content.updating(from: intent) as? UNMutableNotificationContent
     }
 
     /// Download to a unique tmp file with the right extension. Returns nil on failure.
