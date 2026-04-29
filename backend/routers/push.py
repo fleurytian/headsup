@@ -175,11 +175,8 @@ async def push(
 ):
     _validate_push_content(req)
     ios_category = _resolve_category(req.category_id, agent.id, session)
-    if not agent.webhook_url:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "WEBHOOK_CONFIG_MISSING", "message": "Configure a webhook URL in your dashboard"},
-        )
+    # webhook_url is optional — agents without one consume responses via SSE
+    # (/v1/responses/stream) or polling (/v1/responses).
 
     user = _get_active_user(req.user_key, agent.id, session)
 
