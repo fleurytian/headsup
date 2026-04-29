@@ -33,7 +33,18 @@ def _get_apns_token() -> str:
     return token
 
 
-HINT_SUFFIX = "  （长按选择回复）"
+# Hint suffixes appended to the body. We pick the language by sniffing CJK
+# in title+body — the agent's user-facing wording sets the tone, regardless
+# of where the agent itself runs.
+HINT_REPLY_ZH    = "  （长按选择回复）"
+HINT_REPLY_EN    = "  (long-press to reply)"
+HINT_INFO_ZH     = "  （仅通知，无需回复）"
+HINT_INFO_EN     = "  (notification only — no reply needed)"
+
+
+def _is_chinese_text(s: str) -> bool:
+    return any("一" <= c <= "鿿" for c in s or "")
+
 
 # iOS notification display limits (chars). Hard caps; agent gets 400 if exceeded.
 MAX_TITLE_LEN = 50
@@ -134,11 +145,16 @@ async def send_push(
     if subtitle:
         subtitle = strip_markdown(subtitle)
 
-    # info_only category has no buttons — don't tell users to long-press for nothing.
+    # Append a hint to the body so users know whether to act.
+    # Language picked from the agent's actual title+body wording.
+    is_zh = _is_chinese_text((title or "") + (body or ""))
     if category_id == "info_only":
-        body_with_hint = body
+        hint = HINT_INFO_ZH if is_zh else HINT_INFO_EN
     else:
-        body_with_hint = body if HINT_SUFFIX in body else body + HINT_SUFFIX
+        hint = HINT_REPLY_ZH if is_zh else HINT_REPLY_EN
+    # Don't double-append on retries — be tolerant of either-language presence.
+    already_hinted = any(h in body for h in (HINT_REPLY_ZH, HINT_REPLY_EN, HINT_INFO_ZH, HINT_INFO_EN))
+    body_with_hint = body if already_hinted else body + hint
 
     alert: dict = {"title": title, "body": body_with_hint}
     if subtitle:
