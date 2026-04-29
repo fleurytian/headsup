@@ -65,6 +65,13 @@ final class PushService: NSObject, ObservableObject {
         registerAllCategories()
     }
 
+    /// Re-register with APNs so iOS hands us back a fresh device token on the
+    /// next callback. Triggered opportunistically on swipe-to-dismiss.
+    /// Cheap — usually returns the same token without round-tripping our server.
+    func refreshDeviceToken() async {
+        await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
+    }
+
     /// After a successful login, send the latest token to the backend.
     func syncDeviceTokenWithBackend() async {
         guard let token = deviceTokenString,
@@ -88,29 +95,36 @@ final class PushService: NSObject, ObservableObject {
     private func registerAllCategories() {
         var all: [UNNotificationCategory] = []
 
-        // info_only: notification with no buttons (for status/info messages)
+        // .customDismissAction: a swipe-to-dismiss wakes the app's didReceive
+        // handler, which lets us refresh the APNs device token + bump local
+        // history. Cheap and useful — Bark uses the same option.
+        let baseOptions: UNNotificationCategoryOptions = [.customDismissAction]
+
+        // info_only: notification with no agent buttons. Still attach Copy
+        // so the user can grab the body without opening the app.
         all.append(UNNotificationCategory(
             identifier: "info_only",
-            actions: [],
+            actions: [Self.copyAction()],
             intentIdentifiers: [],
-            options: []
+            options: baseOptions
         ))
 
-        // 8 built-in categories — each gets a "Later" action appended automatically
+        // 8 built-in categories — append Later (if room) + Copy (always, last).
         for cat in NotificationCategory.allCases {
             var actions: [UNNotificationAction] = cat.builtInActions
-            if actions.count < 4 {
+            if actions.count < 3 {                       // leave room for Copy
                 actions.append(Self.laterAction())
             }
+            actions.append(Self.copyAction())
             all.append(UNNotificationCategory(
                 identifier: cat.rawValue,
                 actions: actions,
                 intentIdentifiers: [],
-                options: []
+                options: baseOptions
             ))
         }
 
-        // Custom agent categories — also get Later if there's room
+        // Custom agent categories — same recipe.
         for sc in serverCategories {
             var actions: [UNNotificationAction] = sc.buttons.map { btn -> UNNotificationAction in
                 var options: UNNotificationActionOptions = []
@@ -125,14 +139,18 @@ final class PushService: NSObject, ObservableObject {
                 }
                 return UNNotificationAction(identifier: btn.id, title: btn.label, options: options)
             }
-            if actions.count < 4 {
+            if actions.count < 3 {
                 actions.append(Self.laterAction())
+            }
+            // Only have room for Copy if total < 4 — iOS hard-caps at 4 lock-screen actions.
+            if actions.count < 4 {
+                actions.append(Self.copyAction())
             }
             all.append(UNNotificationCategory(
                 identifier: sc.ios_id,
                 actions: actions,
                 intentIdentifiers: [],
-                options: []
+                options: baseOptions
             ))
         }
 
@@ -149,6 +167,21 @@ final class PushService: NSObject, ObservableObject {
             )
         }
         return UNNotificationAction(identifier: "later", title: "稍后再说", options: [])
+    }
+
+    /// "复制 / Copy" — handled in HeadsUpApp's didReceive: writes the body (or
+    /// the auto_copy override) to UIPasteboard. Always last in the list so iOS
+    /// shows the agent's primary action first.
+    static func copyAction() -> UNNotificationAction {
+        if #available(iOS 15.0, *) {
+            return UNNotificationAction(
+                identifier: "copy",
+                title: "复制",
+                options: [],
+                icon: UNNotificationActionIcon(systemImageName: "doc.on.doc")
+            )
+        }
+        return UNNotificationAction(identifier: "copy", title: "复制", options: [])
     }
 }
 

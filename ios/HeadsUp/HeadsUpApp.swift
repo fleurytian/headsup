@@ -94,31 +94,51 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let info = response.notification.request.content.userInfo
-        guard let messageId = info["message_id"] as? String else {
+        let actionId = response.actionIdentifier
+        let categoryId = response.notification.request.content.categoryIdentifier
+        let originalNotificationId = response.notification.request.identifier
+        let body = response.notification.request.content.body
+
+        // ── Local-only actions (no server report) ────────────────────────────
+
+        // Swipe-to-dismiss — opportunistic device-token refresh so a stale token
+        // gets replaced before the next push attempt. Free; doesn't talk to
+        // server unless the token actually changed.
+        if actionId == UNNotificationDismissActionIdentifier {
+            Task { await PushService.shared.refreshDeviceToken() }
             completionHandler()
             return
         }
 
-        let actionId = response.actionIdentifier
-        let buttonId = actionId == UNNotificationDefaultActionIdentifier ? "default" : actionId
-        let categoryId = response.notification.request.content.categoryIdentifier
+        // Copy action — write body (or auto_copy override) to clipboard,
+        // toast the user, and don't bother the agent with a "copy" reply.
+        if actionId == "copy" {
+            let textToCopy = (info["auto_copy"] as? String).map { $0.isEmpty ? body : $0 } ?? body
+            UIPasteboard.general.string = textToCopy
+            Self.postConfirmationNotification(label: "已复制 · Copied", success: true)
+            UNUserNotificationCenter.current().removeDeliveredNotifications(
+                withIdentifiers: [originalNotificationId]
+            )
+            completionHandler()
+            return
+        }
 
-        let originalNotificationId = response.notification.request.identifier
+        // ── Agent-bound actions ──────────────────────────────────────────────
+        guard let messageId = info["message_id"] as? String else {
+            completionHandler()
+            return
+        }
+        let buttonId = actionId == UNNotificationDefaultActionIdentifier ? "default" : actionId
 
         Task {
             let label = await Self.lookupButtonLabel(categoryId: categoryId, buttonId: buttonId)
-            // Show confirmation immediately, before the network call returns,
-            // so the user gets instant feedback.
             if buttonId != "default" {
                 Self.postConfirmationNotification(label: label, success: true)
             }
-            // Remove the original notification from notification center so it doesn't
-            // sit there confusing the user about whether they responded.
             UNUserNotificationCenter.current().removeDeliveredNotifications(
                 withIdentifiers: [originalNotificationId]
             )
             _ = await Self.reportAction(messageId: messageId, buttonId: buttonId, buttonLabel: label)
-            // The user just responded — bump any history view on screen.
             await MainActor.run {
                 NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
             }

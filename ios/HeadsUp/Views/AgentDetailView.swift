@@ -176,6 +176,29 @@ struct HistoryRow: View {
 
     private var isInfoOnly: Bool { item.category_id == "info_only" }
 
+    /// Render the body as Markdown if it parses; fall back to plain otherwise.
+    /// `inlineOnlyAndDisableSubstitutions: true` means we don't try to make
+    /// links tappable inside the row (handled at the row level).
+    private var renderedBody: AttributedString {
+        // Strip the trailing hint suffix (added by server) before parsing —
+        // it's display chrome, not the agent's content.
+        var raw = item.body
+        for suffix in [
+            "  （长按选择回复）", "  (long-press to reply)",
+            "  （仅通知，无需回复）", "  (notification only — no reply needed)",
+        ] {
+            if raw.hasSuffix(suffix) {
+                raw = String(raw.dropLast(suffix.count))
+                break
+            }
+        }
+        if let attr = try? AttributedString(markdown: raw,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            return attr
+        }
+        return AttributedString(raw)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
@@ -193,7 +216,7 @@ struct HistoryRow: View {
                 Spacer()
             }
             Text(item.title).font(HU.body(.semibold)).foregroundStyle(HU.C.ink)
-            Text(item.body).font(HU.small()).foregroundStyle(HU.C.muted)
+            Text(renderedBody).font(HU.small()).foregroundStyle(HU.C.muted)
                 .lineSpacing(2).lineLimit(3)
             HStack(spacing: 6) {
                 Text(item.sent_at.formatted(date: .abbreviated, time: .shortened))
