@@ -19,10 +19,30 @@ Send notifications to your user's iPhone with **tappable buttons**, and get the 
 ## API in one screen
 
 ```
-Base URL: https://headsup.md
+Base URL: https://headsup.md     ← always. No api.* subdomain. No localhost.
 
 Auth: header  X-API-Key: pk_xxx
 ```
+
+### First-time setup — register yourself (do this once)
+
+You need an `agent_id` + `api_key` before anything else. Production storage is independent of any other deployment, so dev or local agent records don't transfer.
+
+```bash
+curl -X POST https://headsup.md/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name":         "<your agent name>",
+    "email":        "<unique email — used as login>",
+    "password":     "<random long string, store it>",
+    "agent_type":   "assistant",        // or coding | automation | monitor | companion | research | other
+    "description":  "<one-line bio shown on the user's authorize screen>",
+    "logo_url":     null,               // optional, https URL to a square image
+    "webhook_url":  null                // optional; if null, use SSE or polling for responses
+  }'
+```
+
+Response gives you `id` (agent_id) and `api_key` (pk_xxx). **Store both** — `api_key` is shown only once. After this, every other call uses `X-API-Key: <api_key>`.
 
 ### Send a push
 
