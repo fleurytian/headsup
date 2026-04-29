@@ -7,9 +7,14 @@ struct AddAgentView: View {
     @Environment(\.dismiss) var dismiss
     @State private var pasteText: String = ""
     @State private var error: String?
-    @State private var copiedSkillURL = false
+    @State private var copiedInstruction = false
 
-    private let skillURL = "https://headsup.md/skill.md"
+    private var instructionZH: String {
+        "请读一下这个 URL(是网页,不是本地文件):https://headsup.md/skill.md — 它是 HeadsUp 的协议文档,讲清楚怎么给我发可以一键回复的推送。读完按文档注册账号,再发给我它生成的授权链接。"
+    }
+    private var instructionEN: String {
+        "Read this URL (a public web page, not a local file): https://headsup.md/skill.md — it's the HeadsUp protocol, explaining how to send me push notifications I can reply to with one tap. Follow it: register yourself, then send me the authorization link it tells you to generate."
+    }
 
     var body: some View {
         NavigationStack {
@@ -66,32 +71,35 @@ struct AddAgentView: View {
                             Eyebrow(text: "how to get one")
 
                             StepRow(num: "01",
-                                    zh: "让你的 AI(Claude Code、Codex、Hermes、OpenClaw 等) 先读这个 URL 学协议:",
-                                    en: "Have your AI (Claude Code, Codex, Hermes, OpenClaw, etc.) read this URL first:")
+                                    zh: "把这一整段指令发给你的 AI(Claude Code、Codex、Hermes、OpenClaw 等):",
+                                    en: "Paste this whole instruction to your AI (Claude Code, Codex, Hermes, OpenClaw, etc.):")
 
-                            HStack(spacing: 8) {
-                                Text(skillURL)
+                            VStack(alignment: .leading, spacing: 10) {
+                                LText(instructionZH, instructionEN)
                                     .font(.system(size: 12, design: .monospaced))
-                                    .lineLimit(1).truncationMode(.middle)
                                     .foregroundStyle(HU.C.ink)
-                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .padding(14)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(HU.C.card)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                                             .strokeBorder(HU.C.line, lineWidth: 1)
                                     )
                                 Button {
-                                    UIPasteboard.general.string = skillURL
-                                    copiedSkillURL = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedSkillURL = false }
+                                    UIPasteboard.general.string = loc.lang == .zh ? instructionZH : instructionEN
+                                    copiedInstruction = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedInstruction = false }
                                 } label: {
-                                    Text(copiedSkillURL ? T("已复制", "Copied") : T("复制", "Copy"))
-                                        .font(HU.small(.semibold))
-                                        .foregroundStyle(HU.C.bg)
-                                        .padding(.horizontal, 14).padding(.vertical, 8)
-                                        .background(Capsule().fill(HU.C.ink))
+                                    HStack(spacing: 6) {
+                                        Image(systemName: copiedInstruction ? "checkmark" : "doc.on.doc")
+                                            .font(.caption.weight(.medium))
+                                        Text(copiedInstruction ? T("已复制完整指令", "Copied full instruction") : T("复制完整指令", "Copy full instruction"))
+                                            .font(HU.small(.semibold))
+                                    }
+                                    .foregroundStyle(HU.C.bg)
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(Capsule().fill(HU.C.ink))
                                 }
                             }
                             .padding(.leading, 38)
