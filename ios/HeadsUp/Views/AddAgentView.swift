@@ -126,11 +126,31 @@ struct AddAgentView: View {
         guard let url = URL(string: trimmed) else {
             error = T("链接格式不对", "Invalid link"); return
         }
-        guard url.scheme == "headsup", url.host == "authorize" else {
-            error = T("这不是 HeadsUp 授权链接(应以 headsup://authorize 开头)",
-                     "Not a HeadsUp link (must start with headsup://authorize)"); return
+        // Accept both:
+        //   headsup://authorize?token=...&agent_id=...
+        //   https://headsup.md/authorize?token=...&agent_id=...
+        let isDeepLink = url.scheme == "headsup" && url.host == "authorize"
+        let isWebLink  = (url.scheme == "https" || url.scheme == "http")
+                         && url.host?.hasSuffix("headsup.md") == true
+                         && url.path == "/authorize"
+        guard isDeepLink || isWebLink else {
+            error = T("这不是 HeadsUp 授权链接", "Not a HeadsUp authorization link"); return
         }
-        deepLink.handle(url: url)
+        let target: URL
+        if isWebLink {
+            // Rebuild as headsup://authorize?... so DeepLinkHandler accepts it.
+            var c = URLComponents()
+            c.scheme = "headsup"
+            c.host   = "authorize"
+            c.queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            guard let rebuilt = c.url else {
+                error = T("链接格式不对", "Invalid link"); return
+            }
+            target = rebuilt
+        } else {
+            target = url
+        }
+        deepLink.handle(url: target)
         dismiss()
     }
 }

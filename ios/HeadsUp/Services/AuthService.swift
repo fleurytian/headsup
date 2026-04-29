@@ -14,6 +14,15 @@ final class AuthService: NSObject, ObservableObject {
     override init() {
         super.init()
         loadSession()
+        NotificationCenter.default.addObserver(
+            forName: .headsupSessionInvalid, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.session != nil else { return }
+                self.signOut()
+                self.lastError = "服务器不再认你的登录,请重新登录。\nServer no longer recognizes your session. Please sign in again."
+            }
+        }
     }
 
     // ── Public ────────────────────────────────────────────────────────────────

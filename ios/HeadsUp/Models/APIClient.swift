@@ -95,6 +95,9 @@ final class APIClient {
         guard let http = response as? HTTPURLResponse else {
             throw APIError.noData
         }
+        if http.statusCode == 401 && req.value(forHTTPHeaderField: "Authorization") != nil {
+            await MainActor.run { NotificationCenter.default.post(name: .headsupSessionInvalid, object: nil) }
+        }
         guard (200..<300).contains(http.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw APIError.http(http.statusCode, body)
@@ -105,4 +108,8 @@ final class APIClient {
             throw APIError.decoding(error)
         }
     }
+}
+
+extension Notification.Name {
+    static let headsupSessionInvalid = Notification.Name("headsupSessionInvalid")
 }

@@ -19,8 +19,7 @@ Send notifications to your user's iPhone with **tappable buttons**, and get the 
 ## API in one screen
 
 ```
-Base URL: https://api.headsup.md (production)
-          http://192.168.5.153:8000 (your local dev)
+Base URL: https://headsup.md
 
 Auth: header  X-API-Key: pk_xxx
 ```
@@ -89,13 +88,19 @@ X-Webhook-Signature: sha256=...   // HMAC-SHA256 of body using your api_key
 
 ### Onboarding a new user
 
-Each Agent has a **permanent authorization link**:
+Generate a single-use authorization link by POST'ing to `/authorize/initiate`:
 
-```
-https://api.headsup.md/authorize?agent_id=YOUR_AGENT_ID
+```bash
+curl -X POST https://headsup.md/authorize/initiate \
+  -d "agent_id=YOUR_AGENT_ID"
+# returns HTML page with embedded headsup://authorize?token=...&agent_id=... deep link
 ```
 
-Send this link to the user. Once they tap "Authorize" in their HeadsUp iPhone app, you get a webhook OR you can poll `GET /v1/users` to see new bindings.
+Send the user **either**:
+- the `https://headsup.md/authorize?token=...&agent_id=...` URL — they tap in Safari, "Open in HeadsUp" button takes them through, **or**
+- the `headsup://authorize?token=...&agent_id=...` deep link — they paste in app's "Add Agent" view
+
+Tokens expire in 30 minutes. Once they tap "Authorize" in the app, you get a webhook OR poll `GET /v1/users` to see new bindings.
 
 ## Decision tree
 
