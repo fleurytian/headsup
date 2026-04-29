@@ -8,5 +8,16 @@
     <array>
         <string>Default</string>
     </array>
+    <!-- Communication Notifications: lets the NSE upgrade pushes to the
+         iMessage-style sender-avatar layout. Bark uses this and it's how
+         their banner shows the agent's avatar on the left. Apple wants this
+         pre-approved for App Store distribution; Xcode's automatic dev
+         provisioning lets it through for Debug builds. -->
+    <key>com.apple.developer.usernotifications.communication</key>
+    <true/>
+    <!-- Time Sensitive interruption level — pushes can break through Focus.
+         Required when payload sets aps.interruption-level=timeSensitive. -->
+    <key>com.apple.developer.usernotifications.time-sensitive</key>
+    <true/>
 </dict>
 </plist>
