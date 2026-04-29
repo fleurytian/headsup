@@ -158,6 +158,11 @@ async def _send_and_update(message_id: str, device_token: str):
         if not message:
             return
         agent = session.get(Agent, message.agent_id)
+        # The sender avatar is the agent's own logo, falling back to a
+        # generated initial-on-accent so every agent has an identifiable face.
+        agent_avatar = (agent.logo_url if agent else None) or (
+            _default_avatar_url(agent) if agent else None
+        )
         ok, _reason = await send_push(
             device_token=device_token,
             title=message.title,
@@ -167,7 +172,7 @@ async def _send_and_update(message_id: str, device_token: str):
             data=json.loads(message.data) if message.data else None,
             ttl=message.ttl,
             subtitle=message.subtitle,
-            image_url=message.image_url,
+            image_url=message.image_url,           # right-side thumbnail (optional)
             level=message.level,
             sound=message.sound,
             badge=message.badge,
@@ -176,6 +181,7 @@ async def _send_and_update(message_id: str, device_token: str):
             auto_copy=message.auto_copy,
             agent_id=agent.id if agent else None,
             agent_name=agent.name if agent else None,
+            agent_avatar_url=agent_avatar,         # sender avatar (always present)
         )
         message.status = "delivered" if ok else "failed"
         if ok:
@@ -198,11 +204,12 @@ async def push(
 
     user = _get_active_user(req.user_key, agent.id, session)
 
-    # Default the notification image to the agent's logo so pushes carry the
-    # agent's identity. If the agent didn't set logo_url, fall back to an
-    # auto-generated avatar (first letter on accent color). Agents can
-    # override per-push via image_url.
-    image_url = req.image_url or agent.logo_url or _default_avatar_url(agent)
+    # image_url is for an *optional* per-message attachment (right-side thumbnail
+    # in the banner). The agent's own identity is rendered separately as the
+    # sender avatar via Communication Notifications — see _send_and_update,
+    # which passes agent.logo_url (or an auto-generated fallback) as
+    # agent_avatar_url to the APNs payload.
+    image_url = req.image_url
 
     message = PushMessage(
         external_id=req.message_id,

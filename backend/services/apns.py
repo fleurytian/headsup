@@ -119,6 +119,7 @@ async def send_push(
     auto_copy: Optional[str] = None,
     agent_id: Optional[str] = None,
     agent_name: Optional[str] = None,
+    agent_avatar_url: Optional[str] = None,
 ) -> tuple[bool, str]:
     try:
         token = _get_apns_token()
@@ -154,28 +155,30 @@ async def send_push(
         aps["thread-id"] = group
     if level in {"passive", "active", "timeSensitive", "critical"}:
         aps["interruption-level"] = level
-    # Image attachment requires Notification Service Extension to download
-    # the URL on-device. We set mutable-content=1 so iOS hands the payload
-    # to the extension before showing the banner.
-    if image_url:
+    # NSE needs to run whenever there's an image to download — the per-message
+    # `image_url` (right-side thumbnail) OR the agent_avatar_url that becomes
+    # the Communication-Notification sender face.
+    if image_url or agent_avatar_url:
         aps["mutable-content"] = 1
 
     payload = {"aps": aps, "message_id": message_id}
     if image_url:
-        payload["image_url"] = image_url
+        payload["image_url"] = image_url           # right-side thumbnail (optional, agent-set)
     if url:
         payload["url"] = url
     if auto_copy:
         payload["auto_copy"] = auto_copy
     if data:
         payload["data"] = data
-    # Sender identity for the iOS NSE to render as a Communication Notification
-    # (iOS 15+) — large avatar at the top of the banner, like an iMessage from
-    # the agent. Without these, NSE falls back to the right-side thumbnail.
+    # Sender identity — the iOS NSE turns these into a Communication
+    # Notification (iOS 15+) so the banner shows the agent as the sender,
+    # avatar at the top, replacing what would otherwise be the host app icon.
     if agent_id:
         payload["agent_id"] = agent_id
     if agent_name:
         payload["agent_name"] = agent_name
+    if agent_avatar_url:
+        payload["agent_avatar_url"] = agent_avatar_url
 
     headers = {
         "authorization": f"bearer {token}",
