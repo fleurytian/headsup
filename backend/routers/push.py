@@ -26,6 +26,7 @@ from services.apns import (
     MAX_IMAGE_URL_LEN,
 )
 from services.webhook import deliver_webhook
+from services import badges as badges_svc
 
 router = APIRouter(tags=["push"])
 
@@ -235,6 +236,12 @@ async def push(
 
     background_tasks.add_task(_send_and_update, message.id, user.apns_device_token)
 
+    # Badges: cheap synchronous eval. Failure here must not break the push.
+    try:
+        badges_svc.on_push_sent(session, agent_id=agent.id, message=message)
+    except Exception:
+        pass
+
     return PushResponse(message_id=message.id, status="queued", created_at=message.created_at)
 
 
@@ -266,6 +273,10 @@ async def retract_push(
     user = session.get(AppUser, message.user_id)
     if not user or not user.apns_device_token:
         return {"status": "no_device"}
+    try:
+        badges_svc.on_retract(session, agent_id=agent.id)
+    except Exception:
+        pass
     ok, reason = await send_silent_push(
         user.apns_device_token,
         custom_data={"delete": "1", "id": message_id, "agent_id": agent.id},

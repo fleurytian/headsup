@@ -14,6 +14,15 @@ from services.webhook import retry_loop
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     create_db_and_tables()
+    # Seed badge catalog (idempotent — updates copy/icon if it changes).
+    from database import engine
+    from sqlmodel import Session
+    from services.badges import seed_badges
+    with Session(engine) as s:
+        try:
+            seed_badges(s)
+        except Exception as e:
+            print(f"badge seed failed: {e}")
     task = asyncio.create_task(retry_loop())
     yield
     task.cancel()

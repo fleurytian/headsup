@@ -127,6 +127,45 @@ class AuthorizationRequest(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class Event(SQLModel, table=True):
+    """Append-only event log for analytics + badge evaluation.
+
+    `kind` is the verb ("push_sent", "push_replied", "agent_authorized",
+    "agent_revoked", "agent_muted", "app_opened", "delete_account_canceled",
+    ...). Actor is whoever triggered the event — usually a user or an agent.
+    Meta is whatever's relevant for that kind. Designed to be cheap to write
+    and dumpable to a real warehouse later.
+    """
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    kind: str = Field(index=True)
+    actor_kind: str = Field(index=True)            # "user" | "agent" | "system"
+    actor_id: Optional[str] = Field(default=None, index=True)
+    meta: Optional[str] = None                     # JSON string; small payloads only
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class Badge(SQLModel, table=True):
+    """Static badge definition, seeded at startup from services/badges.py."""
+    id: str = Field(primary_key=True)              # short slug, e.g. "first-ping"
+    scope: str = Field(index=True)                 # "agent" | "user" | "pair"
+    name_zh: str
+    name_en: str
+    description_zh: str
+    description_en: str
+    icon: str                                      # SF Symbol or emoji
+    secret: bool = Field(default=False)
+    early: bool = Field(default=False)             # surfaced as locked-list filter
+
+
+class EarnedBadge(SQLModel, table=True):
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    badge_id: str = Field(foreign_key="badge.id", index=True)
+    user_id: Optional[str] = Field(default=None, foreign_key="appuser.id", index=True)
+    agent_id: Optional[str] = Field(default=None, foreign_key="agent.id", index=True)
+    earned_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    notified: bool = Field(default=False)          # have we sent the celebration push?
+
+
 class Category(SQLModel, table=True):
     """Custom button-template defined by an Agent.
 

@@ -30,9 +30,10 @@ from models import (
     PushMessage,
     WebhookDelivery,
 )
-from services import event_bus
+from services import event_bus, badges as badges_svc
 from services.apple_signin import verify_identity_token
 from services.webhook import deliver_webhook
+from models import Badge as BadgeRow, EarnedBadge
 
 
 def get_authed_user(
@@ -161,6 +162,11 @@ def confirm_authorization(
     session.add(auth_req)
     session.commit()
 
+    try:
+        badges_svc.on_agent_authorized(session, user_id=user.id)
+    except Exception:
+        pass
+
     return {"status": "bound", "agent_id": auth_req.agent_id}
 
 
@@ -204,6 +210,15 @@ async def report_action(
     session.refresh(delivery)
 
     background_tasks.add_task(deliver_webhook, delivery.id)
+
+    # Badges (best-effort; never break delivery on a badge eval bug).
+    try:
+        badges_svc.on_push_replied(
+            session, user_id=user.id, agent_id=message.agent_id,
+            button_id=req.button_id, message=message, delivery=delivery,
+        )
+    except Exception:
+        pass
 
     # Parse `data` once before publishing — webhook + /v1/responses both
     # surface it as a dict, so SSE must too. Was a string before and broke
@@ -283,6 +298,7 @@ def get_bindings(
             "agent_type":       agent.agent_type,
             "bound_at":         b.bound_at,
             "last_message_at":  latest.created_at if latest else None,
+            "last_message_title": latest.title if latest else None,
             "unread_count":     unread,
         })
     # Most recently active agents first, fall back to bind order.
@@ -383,6 +399,11 @@ def revoke_binding(
     session.add(binding)
     session.commit()
 
+    try:
+        badges_svc.on_agent_revoked(session, user_id=user.id)
+    except Exception:
+        pass
+
 
 @router.get("/categories", response_model=list[AppCategoryResponse])
 def list_categories_for_app(
@@ -482,6 +503,13 @@ def set_mute(
         user.mute_until = datetime.utcnow() + timedelta(minutes=req.minutes)
     session.add(user)
     session.commit()
+
+    if req.minutes and req.minutes > 0:
+        try:
+            badges_svc.on_user_action(session, user_id=user.id, action="mute_first")
+        except Exception:
+            pass
+
     return {"mute_until": user.mute_until}
 
 
@@ -569,3 +597,151 @@ def my_history(
             responded_at=delivery.created_at if delivery else None,
         ))
     return out
+
+
+# ── Stats / data / badges / diagnose ─────────────────────────────────────────
+
+@router.get("/me/stats")
+def my_stats(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+    """Today's-summary numbers for the home screen header.
+
+    Cheap, no agent breakdown — that's what /me/data is for.
+    """
+    from sqlalchemy import func as _func
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    received_today = session.exec(
+        select(_func.count()).select_from(PushMessage).where(
+            PushMessage.user_id == user.id,
+            PushMessage.created_at >= today_start,
+        )
+    ).first() or 0
+    replied_today = session.exec(
+        select(_func.count()).select_from(WebhookDelivery).where(
+            WebhookDelivery.user_id == user.id,
+            WebhookDelivery.created_at >= today_start,
+        )
+    ).first() or 0
+    # Unanswered across all agents (excluding info_only)
+    pending = session.exec(
+        select(PushMessage).where(
+            PushMessage.user_id == user.id,
+            PushMessage.category_id != "info_only",
+        )
+    ).all()
+    unread_total = sum(
+        1 for m in pending
+        if not session.exec(select(WebhookDelivery).where(WebhookDelivery.message_id == m.id).limit(1)).first()
+    )
+    return {
+        "received_today": received_today,
+        "replied_today": replied_today,
+        "unread_total": unread_total,
+    }
+
+
+@router.get("/me/data")
+def my_data(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+    """Lifetime stats — for Settings → My Data.
+
+    Heatmap-style hourly breakdown is computed on the fly. Acceptable up
+    to a few thousand messages; switch to a materialized view if it gets slow.
+    """
+    from sqlalchemy import func as _func
+    total_received = session.exec(
+        select(_func.count()).select_from(PushMessage).where(PushMessage.user_id == user.id)
+    ).first() or 0
+    total_replied = session.exec(
+        select(_func.count()).select_from(WebhookDelivery).where(WebhookDelivery.user_id == user.id)
+    ).first() or 0
+    deliveries = session.exec(
+        select(WebhookDelivery, PushMessage).where(
+            WebhookDelivery.user_id == user.id,
+            PushMessage.id == WebhookDelivery.message_id,
+        )
+    ).all()
+    deltas = []
+    hour_buckets = [0] * 24
+    for d, m in deliveries:
+        if m and d:
+            delta = (d.created_at - m.created_at).total_seconds()
+            if 0 <= delta <= 7 * 24 * 3600:
+                deltas.append(delta)
+            hour_buckets[d.created_at.hour] += 1
+    deltas.sort()
+    median = deltas[len(deltas) // 2] if deltas else None
+    response_rate = (total_replied / total_received) if total_received else None
+    return {
+        "total_received": total_received,
+        "total_replied": total_replied,
+        "response_rate": response_rate,
+        "median_response_seconds": median,
+        "hour_histogram": hour_buckets,
+        "since": user.created_at if hasattr(user, "created_at") else None,
+    }
+
+
+@router.get("/me/badges")
+def my_badges(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+    """All user-scope + paired badges, with `earned_at` set when held."""
+    earned = {
+        e.badge_id: e for e in session.exec(
+            select(EarnedBadge).where(EarnedBadge.user_id == user.id)
+        ).all()
+    }
+    out = []
+    rows = session.exec(select(BadgeRow).where(BadgeRow.scope.in_(["user", "pair"]))).all()
+    for b in rows:
+        e = earned.get(b.id)
+        # Hide secret + unearned from the locked list — only the earned ones
+        # should reveal a secret badge's existence.
+        if b.secret and not e:
+            continue
+        out.append({
+            "id": b.id,
+            "scope": b.scope,
+            "name_zh": b.name_zh, "name_en": b.name_en,
+            "description_zh": b.description_zh, "description_en": b.description_en,
+            "icon": b.icon,
+            "secret": b.secret,
+            "early": b.early,
+            "earned_at": e.earned_at.isoformat() if e else None,
+        })
+    return {"badges": out, "earned_count": len(earned), "total_visible": len(out)}
+
+
+@router.post("/me/badges/curious-tap", status_code=204)
+def curious_tap(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+    """Trigger the meta 'Curious Cat' badge — the only one that earns by being
+    looked at. iOS calls this when the user taps a locked badge."""
+    try:
+        badges_svc.on_user_action(session, user_id=user.id, action="curious_tap")
+    except Exception:
+        pass
+
+
+@router.post("/me/cold-feet", status_code=204)
+def cold_feet(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+    """User opened the Delete Account dialog and chose Cancel."""
+    try:
+        badges_svc.on_user_action(session, user_id=user.id, action="cold_feet")
+    except Exception:
+        pass
+
+
+@router.get("/me/diagnose")
+def diagnose(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+    """Self-test the user's setup — surfaces 'why am I not getting pushes?'."""
+    bindings = session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.user_id == user.id,
+            AgentUserBinding.status == "active",
+        )
+    ).all()
+    return {
+        "user_key": user.user_key,
+        "has_apns_token": bool(user.apns_device_token),
+        "muted_until": user.mute_until,
+        "active_bindings": len(bindings),
+        "session_ok": True,                     # we only got here if session was valid
+        "server_time": datetime.utcnow().isoformat(),
+    }

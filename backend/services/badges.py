@@ -1,0 +1,430 @@
+"""Badge definitions + evaluator.
+
+Two parts:
+
+1. `BUILTIN_BADGES` — the static catalog. Seeded into the `badge` table at
+   startup; bilingual; some marked `secret=True` so they don't appear in the
+   user's locked-list (only revealed when earned).
+
+2. `evaluate_for_event(...)` — fast trigger logic. Called after key events
+   (push_sent, push_replied, agent_revoked, ...). For each badge whose
+   trigger touches that event, do a *single targeted query* to check the
+   threshold; if met and not already earned, INSERT EarnedBadge + queue a
+   celebration push.
+
+Don't run a global "scan everything" job. Each evaluation is O(small) and
+runs synchronously after the event commit.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Callable, Optional
+
+from sqlmodel import Session, func, select
+
+from models import (
+    Agent,
+    AgentUserBinding,
+    AppUser,
+    Badge as BadgeRow,
+    EarnedBadge,
+    PushMessage,
+    WebhookDelivery,
+)
+
+
+# ── Catalog ──────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class BadgeDef:
+    id: str
+    scope: str                          # "agent" | "user" | "pair"
+    name_zh: str
+    name_en: str
+    description_zh: str
+    description_en: str
+    icon: str
+    secret: bool = False
+    early: bool = True                  # default: early; long-game ones override
+
+
+# Helper to keep table compact.
+def _b(*args, **kwargs) -> BadgeDef:
+    return BadgeDef(*args, **kwargs)
+
+
+BUILTIN_BADGES: list[BadgeDef] = [
+    # ── EARLY · Agent (10) ───────────────────────────────────────────────────
+    _b("first-ping",       "agent", "首响", "First Ping",
+       "系统正式认识你了。", "We hear you, agent.", "📣"),
+    _b("hello-world",      "agent", "你好世界", "Hello, World",
+       "经典款。", "The eternal classic.", "🌐"),
+    _b("brevity",          "agent", "惜字如金", "Brevity Wins",
+       "少即是多。多即是吵。", "Less is more. More is noise.", "✏️"),
+    _b("tightrope",        "agent", "钢丝党", "Tightrope",
+       "距离 BODY_TOO_LONG 还有 19 字。", "19 chars from a 400 error.", "🪡",
+       secret=True),
+    _b("glamour-shot",     "agent", "美图秀秀", "Glamour Shot",
+       "门面工程做得好。", "Good headshot, good vibes.", "🪞"),
+    _b("code-switcher",    "agent", "两副嗓子", "Code Switcher",
+       "中英自如,多 personality。", "Bilingual flex.", "🔀"),
+    _b("time-traveler",    "agent", "穿越者", "Time Traveler",
+       "你击穿了用户的 Focus。Apple 看见了。", "You broke Focus mode. Apple noticed.", "⏱"),
+    _b("bespoke",          "agent", "私人订制", "Bespoke",
+       "自定按钮的人是认真的。", "Custom buttons = real product thinking.", "🪢"),
+    _b("i-take-it-back",   "agent", "我反悔了", "I Take It Back",
+       "打码不如撤回。", "Cleaner than a follow-up.", "↩",
+       secret=True),
+    _b("witching-hour",    "agent", "凌晨三点", "Witching Hour",
+       "用户睡着,你没睡。", "They're asleep. You aren't.", "🌙"),
+
+    # ── EARLY · User (10) ────────────────────────────────────────────────────
+    _b("hello-friend",     "user",  "嗨,你好", "Hello, Friend",
+       "你和 agent 正式开始通信。", "The protocol is now live.", "👋"),
+    _b("snap-decision",    "user",  "0.5 秒侠", "Snap Decision",
+       "全凭直觉。多半也对。", "All gut, somehow correct.", "⚡"),
+    _b("slow-roast",       "user",  "慢炖", "Slow Roast",
+       "咖啡比较重要。", "The coffee came first.", "🍵"),
+    _b("curator-101",      "user",  "选品师", "Curator-in-Training",
+       "你已经开始有 portfolio 了。", "You have a portfolio now.", "📚"),
+    _b("curious-cat",      "user",  "好奇喵", "Curious Cat",
+       "我说过它是空的吧。", "Told you it was empty.", "🐈",
+       secret=True),
+    _b("manana",           "user",  "下次一定", "Mañana",
+       "我们都说过这句。", "Promises, promises.", "🛏",
+       secret=True),
+    _b("bouncer-trainee",  "user",  "保安实习", "Bouncer-in-Training",
+       "agent 可以走人。你也可以叫他走。", "Agents quit. So can you.", "🚪"),
+    _b("dnd-apprentice",   "user",  "勿扰小学徒", "DND Apprentice",
+       "一小时清净。已存档。", "One hour of peace. Filed.", "🌿"),
+    _b("cold-feet",        "user",  "差点删号", "Cold Feet",
+       "我们就知道你会回头。", "Knew you'd come around.", "🥶",
+       secret=True),
+    _b("welcome-back",     "user",  "重逢", "Welcome Back",
+       "短暂的误会。", "A brief misunderstanding.", "🤝",
+       secret=True),
+
+    # ── LONG · Agent (10) ────────────────────────────────────────────────────
+    _b("centurion",        "agent", "百夫长", "Centurion",
+       "C 代表 Consistent. 或者 Centum。", "C is for Consistent. Or Centum.", "💯",
+       early=False),
+    _b("marathoner",       "agent", "长跑者", "Marathoner",
+       "该不该考虑做副业了。", "Shouldn't you have a side gig by now?", "🏃",
+       early=False),
+    _b("reply-whisperer",  "agent", "回声术士", "Reply Whisperer",
+       "用户真的爱看你。", "Users actually read you.", "🗣",
+       early=False),
+    _b("crickets",         "agent", "蛐蛐儿", "Crickets",
+       "也许问题问得有点重。", "Maybe rephrase the question.", "🦗",
+       early=False, secret=True),
+    _b("ghost-town",       "agent", "鬼城", "Ghost Town",
+       "喂,人呢。", "Hey. Hello?", "🏚",
+       early=False, secret=True),
+    _b("old-faithful",     "agent", "老伙计", "Old Faithful",
+       "比我上一段感情都久。", "Longer than my last relationship.", "🪢",
+       early=False),
+    _b("dawn-patrol",      "agent", "晨曦巡逻", "Dawn Patrol",
+       "敬业,或者失眠,不好说。", "Dedicated. Or unwell. Hard to say.", "🌅",
+       early=False, secret=True),
+    _b("reformed",         "agent", "改过自新", "Reformed Character",
+       "一段救赎弧线。", "A redemption arc.", "🕊",
+       early=False),
+    _b("polyglot",         "agent", "多声部", "Polyglot",
+       "你含纳众语。", "You contain multitudes.", "🪕",
+       early=False),
+    _b("the-diplomat",     "agent", "外交官", "The Diplomat",
+       "零通知疲劳。", "No notification fatigue here.", "🤝",
+       early=False),
+
+    # ── LONG · User (10) ─────────────────────────────────────────────────────
+    _b("manana-master",    "user",  "拖延大师", "Mañana Master",
+       "始终如一,无可挑剔。", "True to yourself, forever.", "🦥",
+       early=False, secret=True),
+    _b("cemetery",         "user",  "通知墓园管理员", "Cemetery Curator",
+       "在此长眠的他们也曾被你打开过。", "RIP, with affection.", "🪦",
+       early=False, secret=True),
+    _b("spring-cleaner",   "user",  "春扫长", "Spring Cleaner",
+       "扫帚是隐喻。", "The broom was metaphorical.", "🧹",
+       early=False),
+    _b("insomniac-negotiator","user","失眠协商者", "Insomniac Negotiator",
+       "那些决定确实更锋利。", "Those decisions felt sharper, didn't they.", "🦉",
+       early=False, secret=True),
+    _b("comeback-kid",     "user",  "失而复返", "Comeback Kid",
+       "我们想你了。", "We missed you.", "🪃",
+       early=False),
+    _b("bouncer-in-chief", "user",  "保安队长", "Bouncer-in-Chief",
+       "一人之国。", "Kingdom of one.", "🛡",
+       early=False, secret=True),
+    _b("loyal-companion",  "user",  "老搭档", "Loyal Companion",
+       "60 天没分手。", "60 days, no breakup.", "🐕",
+       early=False),
+    _b("anniversary",      "user",  "一周年", "Anniversary",
+       "熬过了一整年的 ping。", "You survived a year of pings.", "🎂",
+       early=False),
+    _b("dramatic-return",  "user",  "重生", "Dramatic Return",
+       "该来的总会再来。", "The comeback was inevitable.", "🌅",
+       early=False, secret=True),
+    _b("decisive",         "user",  "果断", "Decisive",
+       "这 app 你说了算。", "You are the boss of this app.", "🎯",
+       early=False),
+]
+
+
+def seed_badges(session: Session) -> int:
+    """Insert/update Badge rows from BUILTIN_BADGES. Returns count touched."""
+    n = 0
+    for b in BUILTIN_BADGES:
+        row = session.get(BadgeRow, b.id)
+        if row is None:
+            session.add(BadgeRow(
+                id=b.id, scope=b.scope,
+                name_zh=b.name_zh, name_en=b.name_en,
+                description_zh=b.description_zh, description_en=b.description_en,
+                icon=b.icon, secret=b.secret, early=b.early,
+            ))
+            n += 1
+        else:
+            # Keep copy/icon up-to-date (for our own iteration).
+            row.scope = b.scope
+            row.name_zh = b.name_zh; row.name_en = b.name_en
+            row.description_zh = b.description_zh; row.description_en = b.description_en
+            row.icon = b.icon
+            row.secret = b.secret; row.early = b.early
+            session.add(row)
+    session.commit()
+    return n
+
+
+# ── Evaluator ────────────────────────────────────────────────────────────────
+
+
+def _already_has(session: Session, badge_id: str, *, user_id: Optional[str] = None,
+                 agent_id: Optional[str] = None) -> bool:
+    q = select(EarnedBadge).where(EarnedBadge.badge_id == badge_id)
+    if user_id is not None:
+        q = q.where(EarnedBadge.user_id == user_id)
+    if agent_id is not None:
+        q = q.where(EarnedBadge.agent_id == agent_id)
+    return session.exec(q.limit(1)).first() is not None
+
+
+def _award(session: Session, badge_id: str, *, user_id: Optional[str] = None,
+           agent_id: Optional[str] = None) -> bool:
+    """Grant the badge if not already held. Returns True if newly awarded."""
+    if _already_has(session, badge_id, user_id=user_id, agent_id=agent_id):
+        return False
+    session.add(EarnedBadge(badge_id=badge_id, user_id=user_id, agent_id=agent_id))
+    session.commit()
+    return True
+
+
+# Each rule receives a session + relevant ids, optionally returns awarded ids.
+# Keep the queries cheap — these run on the hot path of /v1/push and friends.
+
+def on_push_sent(session: Session, *, agent_id: str, message: PushMessage) -> list[str]:
+    """Run after a PushMessage was committed."""
+    awarded: list[str] = []
+
+    # first-ping: any push
+    if _award(session, "first-ping", agent_id=agent_id):
+        awarded.append("first-ping")
+
+    body = (message.body or "").lower()
+    title = (message.title or "").lower()
+
+    if any(w in body or w in title for w in ("hello", "hi", "你好", "嗨")):
+        if _award(session, "hello-world", agent_id=agent_id):
+            awarded.append("hello-world")
+
+    if len(message.body or "") <= 20:
+        # need any 1+ pushes; this fires on first short push
+        if _award(session, "brevity", agent_id=agent_id):
+            awarded.append("brevity")
+
+    if len(message.body or "") >= 180:
+        if _award(session, "tightrope", agent_id=agent_id):
+            awarded.append("tightrope")
+
+    # custom category? PushMessage.category_id holds the ios_id; built-ins
+    # are the 8 well-known names.
+    builtin_categories = {
+        "confirm_reject", "yes_no", "approve_cancel", "choose_a_b",
+        "agree_decline", "remind_later_skip", "action_dismiss", "feedback",
+        "info_only",
+    }
+    if message.category_id not in builtin_categories:
+        if _award(session, "bespoke", agent_id=agent_id):
+            awarded.append("bespoke")
+
+    # time-traveler — used level=timeSensitive
+    if (getattr(message, "level", None) or "") == "timeSensitive":
+        if _award(session, "time-traveler", agent_id=agent_id):
+            awarded.append("time-traveler")
+
+    # witching-hour — push between 23:00 and 03:00 (server UTC; rough enough)
+    h = message.created_at.hour
+    if h >= 23 or h < 3:
+        if _award(session, "witching-hour", agent_id=agent_id):
+            awarded.append("witching-hour")
+
+    # code-switcher — already has a ZH push and now sending EN (or vice versa)?
+    has_zh = _has_message_in_language(session, agent_id=agent_id, zh=True)
+    has_en = _has_message_in_language(session, agent_id=agent_id, zh=False)
+    if has_zh and has_en:
+        if _award(session, "code-switcher", agent_id=agent_id):
+            awarded.append("code-switcher")
+
+    # glamour-shot — agent set a logo_url within their first 5 pushes
+    agent = session.get(Agent, agent_id)
+    if agent and agent.logo_url:
+        push_count = session.exec(
+            select(func.count()).select_from(PushMessage).where(PushMessage.agent_id == agent_id)
+        ).first() or 0
+        if push_count <= 5:
+            if _award(session, "glamour-shot", agent_id=agent_id):
+                awarded.append("glamour-shot")
+
+    # ── Long-game ──
+    push_count = session.exec(
+        select(func.count()).select_from(PushMessage).where(PushMessage.agent_id == agent_id)
+    ).first() or 0
+    if push_count >= 100 and _award(session, "centurion", agent_id=agent_id):
+        awarded.append("centurion")
+    if push_count >= 1000 and _award(session, "marathoner", agent_id=agent_id):
+        awarded.append("marathoner")
+
+    return awarded
+
+
+def _is_zh(s: str) -> bool:
+    return any("一" <= c <= "鿿" for c in (s or ""))
+
+
+def _has_message_in_language(session: Session, *, agent_id: str, zh: bool) -> bool:
+    msgs = session.exec(
+        select(PushMessage.title, PushMessage.body).where(PushMessage.agent_id == agent_id)
+    ).all()
+    for title, body in msgs:
+        text = (title or "") + (body or "")
+        if _is_zh(text) == zh:
+            return True
+    return False
+
+
+def on_push_replied(session: Session, *, user_id: str, agent_id: str,
+                    button_id: str, message: PushMessage,
+                    delivery: WebhookDelivery) -> list[str]:
+    awarded: list[str] = []
+
+    if _award(session, "hello-friend", user_id=user_id):
+        awarded.append("hello-friend")
+
+    delta = (delivery.created_at - message.created_at).total_seconds()
+    if delta < 0.5 and _award(session, "snap-decision", user_id=user_id):
+        awarded.append("snap-decision")
+    if delta > 3600 and _award(session, "slow-roast", user_id=user_id):
+        awarded.append("slow-roast")
+
+    if button_id in ("later", "remind_later"):
+        # Used "稍后再说" the first time?
+        used_count = session.exec(
+            select(func.count()).select_from(WebhookDelivery).where(
+                WebhookDelivery.user_id == user_id,
+                WebhookDelivery.button_id.in_(["later", "remind_later"]),
+            )
+        ).first() or 0
+        if used_count >= 1 and _award(session, "manana", user_id=user_id):
+            awarded.append("manana")
+        if used_count >= 100 and _award(session, "manana-master", user_id=user_id):
+            awarded.append("manana-master")
+
+    # insomniac-negotiator — 20+ replies between 01:00 and 05:00 UTC (rough)
+    h = delivery.created_at.hour
+    if 1 <= h < 5:
+        late = session.exec(
+            select(func.count()).select_from(WebhookDelivery).where(
+                WebhookDelivery.user_id == user_id,
+                func.extract("hour", WebhookDelivery.created_at) >= 1,
+                func.extract("hour", WebhookDelivery.created_at) < 5,
+            )
+        ).first() or 0
+        if late >= 20 and _award(session, "insomniac-negotiator", user_id=user_id):
+            awarded.append("insomniac-negotiator")
+
+    # decisive — 100+ replies, median < 10s
+    total = session.exec(
+        select(func.count()).select_from(WebhookDelivery).where(WebhookDelivery.user_id == user_id)
+    ).first() or 0
+    if total >= 100:
+        # cheap approximation: count "fast" replies and compare to half
+        # (true median requires sorting; we approximate via hi/lo bucketing)
+        fast = session.exec(
+            select(func.count()).select_from(WebhookDelivery).join(PushMessage,
+                PushMessage.id == WebhookDelivery.message_id
+            ).where(
+                WebhookDelivery.user_id == user_id,
+            )
+        ).first() or 0
+        # NOTE: real median calc deferred; for now badge requires user to
+        # fast-reply >= 50% of the time loosely, evaluated via slow_count
+        # being < total/2 if we track it. Skip until we add a delta column.
+        # (Awarded on day-of-eval via offline cron; placeholder.)
+        pass
+
+    return awarded
+
+
+def on_agent_authorized(session: Session, *, user_id: str) -> list[str]:
+    awarded: list[str] = []
+    bound = session.exec(
+        select(func.count()).select_from(AgentUserBinding).where(
+            AgentUserBinding.user_id == user_id,
+            AgentUserBinding.status == "active",
+        )
+    ).first() or 0
+    if bound >= 3 and _award(session, "curator-101", user_id=user_id):
+        awarded.append("curator-101")
+    return awarded
+
+
+def on_agent_revoked(session: Session, *, user_id: str) -> list[str]:
+    awarded: list[str] = []
+    revoked = session.exec(
+        select(func.count()).select_from(AgentUserBinding).where(
+            AgentUserBinding.user_id == user_id,
+            AgentUserBinding.status == "revoked",
+        )
+    ).first() or 0
+    if revoked >= 1 and _award(session, "bouncer-trainee", user_id=user_id):
+        awarded.append("bouncer-trainee")
+    if revoked >= 5 and _award(session, "bouncer-in-chief", user_id=user_id):
+        awarded.append("bouncer-in-chief")
+    return awarded
+
+
+def on_user_action(session: Session, *, user_id: str, action: str) -> list[str]:
+    """Catch-all for misc user actions: 'mute_first', 'curious_tap',
+    'cold_feet', 'welcome_back', 'spring_clean_50'."""
+    awarded: list[str] = []
+    badge_for_action = {
+        "mute_first":     "dnd-apprentice",
+        "curious_tap":    "curious-cat",
+        "cold_feet":      "cold-feet",
+        "welcome_back":   "welcome-back",
+        "spring_clean_50":"spring-cleaner",
+        "comeback_kid":   "comeback-kid",
+    }
+    badge_id = badge_for_action.get(action)
+    if badge_id and _award(session, badge_id, user_id=user_id):
+        awarded.append(badge_id)
+    return awarded
+
+
+def on_retract(session: Session, *, agent_id: str) -> list[str]:
+    awarded: list[str] = []
+    if _award(session, "i-take-it-back", agent_id=agent_id):
+        awarded.append("i-take-it-back")
+    return awarded
