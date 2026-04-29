@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 struct HistoryItem: Codable, Identifiable {
     let message_id: String
@@ -167,6 +168,12 @@ struct AgentDetailView: View {
 struct HistoryRow: View {
     let item: HistoryItem
     var showAgentName: Bool = false
+    @State private var actions: [(id: String, title: String)] = []
+    @State private var sending: String? = nil      // button_id currently being sent
+    @State private var localReply: String? = nil   // optimistic reply label
+
+    private var displayedReply: String? { localReply ?? item.button_label }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if showAgentName {
@@ -179,20 +186,75 @@ struct HistoryRow: View {
                 Text(item.sent_at.formatted(date: .abbreviated, time: .shortened))
                     .font(HU.small()).foregroundStyle(HU.C.muted.opacity(0.7))
                 Spacer()
-                if let label = item.button_label {
+                if let label = displayedReply {
                     Text("→ \(label)")
                         .font(HU.small(.semibold))
                         .foregroundStyle(HU.C.accent)
-                } else {
-                    Text("未响应")
-                        .font(HU.small())
-                        .foregroundStyle(HU.C.muted.opacity(0.7))
                 }
             }
             .padding(.top, 2)
+            // Inline reply buttons — only when no reply yet AND the category has buttons.
+            if displayedReply == nil && item.category_id != "info_only" && !actions.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(actions, id: \.id) { action in
+                        Button {
+                            Task { await reply(buttonId: action.id, buttonLabel: action.title) }
+                        } label: {
+                            Text(action.title)
+                                .font(HU.small(.semibold))
+                                .foregroundStyle(sending == action.id ? HU.C.muted : HU.C.ink)
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(
+                                    Capsule().strokeBorder(HU.C.ink, lineWidth: 1)
+                                        .opacity(sending == nil ? 1 : 0.4)
+                                )
+                        }
+                        .disabled(sending != nil)
+                    }
+                }
+                .padding(.top, 6)
+            }
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .task { await loadActions() }
+    }
+
+    private func loadActions() async {
+        guard displayedReply == nil, item.category_id != "info_only" else { return }
+        // Look up the category's buttons from the in-app registry
+        // (synced via silent push when the agent creates/changes a category).
+        let cats = await withCheckedContinuation { cont in
+            UNUserNotificationCenter.current().getNotificationCategories { cont.resume(returning: $0) }
+        }
+        if let cat = cats.first(where: { $0.identifier == item.category_id }) {
+            self.actions = cat.actions.map { ($0.identifier, $0.title) }
+        }
+    }
+
+    private func reply(buttonId: String, buttonLabel: String) async {
+        guard let session = AuthService.shared.session else { return }
+        sending = buttonId
+        defer { sending = nil }
+        // Optimistic — update UI before the network call completes
+        localReply = buttonLabel
+        struct Body: Encodable {
+            let message_id: String
+            let button_id: String
+            let button_label: String
+        }
+        struct Resp: Decodable { let status: String? }
+        do {
+            let _: Resp = try await APIClient.shared.post(
+                "/v1/app/actions/report",
+                body: Body(message_id: item.message_id, button_id: buttonId, button_label: buttonLabel),
+                sessionToken: session.sessionToken
+            )
+            NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
+        } catch {
+            // Roll back the optimistic UI on failure
+            localReply = nil
+        }
     }
 }
 
