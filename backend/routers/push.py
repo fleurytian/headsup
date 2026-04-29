@@ -29,6 +29,21 @@ from services.webhook import deliver_webhook
 
 router = APIRouter(tags=["push"])
 
+
+def _default_avatar_url(agent: Agent) -> str:
+    """A generated PNG avatar for agents without logo_url.
+
+    ui-avatars.com renders a square PNG with the first letter (or two) of
+    the name on a colored background. Free, fast, no auth. Stable per-name.
+    """
+    from urllib.parse import quote
+    name = quote((agent.name or "Agent").strip()[:24] or "Agent")
+    return (
+        f"https://ui-avatars.com/api/?name={name}"
+        "&background=6B60A8&color=FFFDF8&size=512&bold=true&font-size=0.5"
+    )
+
+
 BUILTIN_CATEGORIES = {
     "confirm_reject",
     "yes_no",
@@ -181,8 +196,10 @@ async def push(
     user = _get_active_user(req.user_key, agent.id, session)
 
     # Default the notification image to the agent's logo so pushes carry the
-    # agent's identity. Agents can override per-push via image_url.
-    image_url = req.image_url or agent.logo_url
+    # agent's identity. If the agent didn't set logo_url, fall back to an
+    # auto-generated avatar (first letter on accent color). Agents can
+    # override per-push via image_url.
+    image_url = req.image_url or agent.logo_url or _default_avatar_url(agent)
 
     message = PushMessage(
         external_id=req.message_id,
