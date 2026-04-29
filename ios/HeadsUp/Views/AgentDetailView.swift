@@ -256,7 +256,33 @@ struct HistoryRow: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = plainBodyForCopy
+            } label: {
+                Label(T("复制内容", "Copy"), systemImage: "doc.on.doc")
+            }
+            Button {
+                UIPasteboard.general.string = "\(item.title)\n\n\(plainBodyForCopy)"
+            } label: {
+                Label(T("复制标题+内容", "Copy with title"), systemImage: "doc.on.doc.fill")
+            }
+        }
         .task { await loadActions() }
+    }
+
+    /// Body without the server-appended hint ("（长按选择回复）" etc.) — what the
+    /// user actually wants when they say "copy this".
+    private var plainBodyForCopy: String {
+        var s = item.body
+        for suffix in [
+            "  （长按选择回复）", "  (long-press to reply)",
+            "  （仅通知，无需回复）", "  (notification only — no reply needed)",
+        ] {
+            if s.hasSuffix(suffix) { s = String(s.dropLast(suffix.count)); break }
+        }
+        return s
     }
 
     private func loadActions() async {
