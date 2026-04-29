@@ -192,7 +192,7 @@ struct EmptyAgentsView: View {
 
                 Spacer().frame(height: 18)
 
-                LText("等一份邀请。", "Waiting for an invitation.")
+                LText("等一个 heads up。", "Get a heads up.")
                     .font(.system(size: 28, weight: .heavy, design: .rounded))
                     .foregroundStyle(HU.C.ink)
                     .padding(.horizontal, 32)
