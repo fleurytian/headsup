@@ -213,12 +213,65 @@ def _already_has(session: Session, badge_id: str, *, user_id: Optional[str] = No
 
 def _award(session: Session, badge_id: str, *, user_id: Optional[str] = None,
            agent_id: Optional[str] = None) -> bool:
-    """Grant the badge if not already held. Returns True if newly awarded."""
+    """Grant the badge if not already held. Returns True if newly awarded.
+
+    Side effect: schedules a celebration notification (silent for now;
+    actual APNs push fired by callers via _enqueue_celebration).
+    """
     if _already_has(session, badge_id, user_id=user_id, agent_id=agent_id):
         return False
     session.add(EarnedBadge(badge_id=badge_id, user_id=user_id, agent_id=agent_id))
     session.commit()
     return True
+
+
+async def celebrate_async(awarded_ids: list[str], *, user_id: Optional[str] = None) -> None:
+    """Best-effort: send a special user-facing push for each newly-earned
+    user badge. Agent badges don't get a push (agent has no device); they
+    surface via a future GET /v1/agents/me/badges endpoint.
+
+    Opens its own DB session — designed to be enqueued via FastAPI
+    background_tasks AFTER the request session has closed.
+    """
+    if not awarded_ids or user_id is None:
+        return
+    from database import engine
+    from services.apns import send_push as _send_push
+
+    with Session(engine) as session:
+        user = session.get(AppUser, user_id)
+        if not user or not user.apns_device_token:
+            return
+
+        for bid in awarded_ids:
+            b = session.get(BadgeRow, bid)
+            if not b:
+                continue
+            ee = session.exec(
+                select(EarnedBadge).where(
+                    EarnedBadge.badge_id == bid,
+                    EarnedBadge.user_id == user_id,
+                )
+            ).first()
+            if ee and ee.notified:
+                continue
+            if ee:
+                ee.notified = True
+                session.add(ee)
+                session.commit()
+            title = f"{b.icon} 解锁: {b.name_zh}"
+            await _send_push(
+                device_token=user.apns_device_token,
+                title=title,
+                body=b.description_zh,
+                category_id="info_only",
+                message_id=f"badge:{bid}:{user_id}",
+                data={"badge_id": bid, "subtype": "badge_earned",
+                      "name_en": b.name_en, "description_en": b.description_en},
+                ttl=3600,
+                sound="default",
+                level="passive",
+            )
 
 
 # Each rule receives a session + relevant ids, optionally returns awarded ids.

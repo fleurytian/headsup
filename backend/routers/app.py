@@ -163,7 +163,11 @@ def confirm_authorization(
     session.commit()
 
     try:
-        badges_svc.on_agent_authorized(session, user_id=user.id)
+        awarded = badges_svc.on_agent_authorized(session, user_id=user.id)
+        if awarded:
+            from fastapi import BackgroundTasks  # avoid top-import; this dep already imported
+            # We don't have BackgroundTasks here without changing signature; fall back to async fire-and-forget.
+            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
     except Exception:
         pass
 
@@ -213,10 +217,12 @@ async def report_action(
 
     # Badges (best-effort; never break delivery on a badge eval bug).
     try:
-        badges_svc.on_push_replied(
+        awarded = badges_svc.on_push_replied(
             session, user_id=user.id, agent_id=message.agent_id,
             button_id=req.button_id, message=message, delivery=delivery,
         )
+        if awarded:
+            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
     except Exception:
         pass
 
@@ -400,7 +406,9 @@ def revoke_binding(
     session.commit()
 
     try:
-        badges_svc.on_agent_revoked(session, user_id=user.id)
+        awarded = badges_svc.on_agent_revoked(session, user_id=user.id)
+        if awarded:
+            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
     except Exception:
         pass
 
@@ -506,7 +514,9 @@ def set_mute(
 
     if req.minutes and req.minutes > 0:
         try:
-            badges_svc.on_user_action(session, user_id=user.id, action="mute_first")
+            awarded = badges_svc.on_user_action(session, user_id=user.id, action="mute_first")
+            if awarded:
+                asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
         except Exception:
             pass
 
@@ -714,7 +724,9 @@ def curious_tap(user: AppUser = Depends(get_authed_user), session: Session = Dep
     """Trigger the meta 'Curious Cat' badge — the only one that earns by being
     looked at. iOS calls this when the user taps a locked badge."""
     try:
-        badges_svc.on_user_action(session, user_id=user.id, action="curious_tap")
+        awarded = badges_svc.on_user_action(session, user_id=user.id, action="curious_tap")
+        if awarded:
+            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
     except Exception:
         pass
 
@@ -723,7 +735,9 @@ def curious_tap(user: AppUser = Depends(get_authed_user), session: Session = Dep
 def cold_feet(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
     """User opened the Delete Account dialog and chose Cancel."""
     try:
-        badges_svc.on_user_action(session, user_id=user.id, action="cold_feet")
+        awarded = badges_svc.on_user_action(session, user_id=user.id, action="cold_feet")
+        if awarded:
+            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
     except Exception:
         pass
 
