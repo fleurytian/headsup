@@ -238,6 +238,41 @@ async def push(
     return PushResponse(message_id=message.id, status="queued", created_at=message.created_at)
 
 
+@router.post("/push/{message_id}/retract", status_code=202)
+async def retract_push(
+    message_id: str,
+    agent: Agent = Depends(get_current_agent),
+    session: Session = Depends(get_session),
+):
+    """Remove a previously-delivered notification from the user's iPhone.
+
+    Useful when the situation has changed and the agent no longer wants the
+    user to see (or act on) the original push — e.g., the deploy already
+    rolled back, the approval window passed, the question is moot.
+
+    Sends a silent (content-available) push with `{"delete":"1","id":<msg>}`.
+    The iOS app's didReceiveRemoteNotification handler removes the matching
+    notification from Notification Center on receipt.
+
+    Idempotent: retracting an already-retracted (or already-acted-on)
+    message is a no-op from the user's POV.
+    """
+    from services.apns import send_silent_push
+    message = session.get(PushMessage, message_id)
+    if not message:
+        raise HTTPException(404, {"code": "MESSAGE_NOT_FOUND", "message": "No such message"})
+    if message.agent_id != agent.id:
+        raise HTTPException(403, {"code": "FORBIDDEN", "message": "Message belongs to another agent"})
+    user = session.get(AppUser, message.user_id)
+    if not user or not user.apns_device_token:
+        return {"status": "no_device"}
+    ok, reason = await send_silent_push(
+        user.apns_device_token,
+        custom_data={"delete": "1", "id": message_id, "agent_id": agent.id},
+    )
+    return {"status": "retracted" if ok else "failed", "reason": reason}
+
+
 @router.post("/push/broadcast")
 async def broadcast(
     req: BroadcastRequest,

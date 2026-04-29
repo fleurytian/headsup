@@ -1,6 +1,6 @@
 # HeadsUp — Interactive Push Skill
 
-`skill_version: 2026-04-29.3`  ·  `last_updated: 2026-04-29`
+`skill_version: 2026-04-29.4`  ·  `last_updated: 2026-04-29`
 
 > Bump `skill_version` when anything below changes substantively. Agents that cache this doc should compare the version and re-fetch on mismatch. The version is the first thing the doc reveals so a `HEAD` or first-line read is enough to decide.
 
@@ -56,10 +56,27 @@ POST /v1/push
   "user_key":    "uk_xxx",            // who
   "category_id": "confirm_reject",    // which button preset (see below)
   "title":       "支付确认",
-  "body":        "AI 助手代你支付 ¥99",
-  "data":        { "order_id": "..." }  // optional, echoed back in webhook
+  "body":        "AI 助手代你支付 ¥99",     // Markdown is OK — `code`, **bold**, *italic* render
+  "data":        { "order_id": "..." }     // optional, echoed back in webhook
+
+  // — all optional below this line —
+  "subtitle":    "Card ending 4242",       // ≤ 80 chars; appears between title and body
+  "level":       "timeSensitive",          // passive | active(default) | timeSensitive | critical
+  "badge":       3,                        // app icon badge number; 0 clears
+  "image_url":   "https://.../chart.png",  // right-side thumbnail in the banner
+  "auto_copy":   "kubectl rollout undo …", // when user taps the Copy action, copy this instead of body
+  "group":       "deploys",                // thread-id; pushes with same group stack together
+  "url":         "https://dashboard/...",  // tap-the-banner deep link (iOS opens in browser)
+  "sound":       "default",                // or your own .caf bundled in the app
+  "ttl":         3600                      // APNs expiration in seconds; default 1h
 }
 ```
+
+**Picking `level`** — most agents stay on `active` (default). Use `timeSensitive` when the user has Focus on and you genuinely need their attention now (production down, payment about to expire). `passive` for "FYI" pushes that shouldn't make a sound. `critical` requires Apple's separate critical-alerts entitlement, leave it off until you ask for it.
+
+**`badge`** — set the app icon badge to a specific number. Useful for "you have 3 pending approvals". HeadsUp clears the badge automatically when the user opens the app, so you only need to set it, not zero it.
+
+**`auto_copy`** — every push has a "Copy" lock-screen action. By default it copies the body. If `auto_copy` is set, that string gets copied instead — handy when the body is human-readable but you want a command / token / URL on the clipboard.
 
 ### Built-in categories
 
@@ -136,6 +153,18 @@ X-API-Key: pk_xxx
 Use `since=` for incremental pulls (advance to the latest `replied_at` after each response). Use `message_id=` to wait on **one specific** push. Recommended cadence: 1-2s while waiting on a specific message, otherwise 5-10s background.
 
 The Python SDK's `bot.ask()` wraps SSE with polling fallback — `ask()` sends, blocks until response arrives, returns.
+
+### Retracting an obsolete push
+
+If the situation has changed and you no longer want the user to see / act on a push you sent earlier (deploy already rolled back, payment window expired, the question became moot), call:
+
+```http
+POST /v1/push/<message_id>/retract
+X-API-Key: pk_xxx
+→ 202 { "status": "retracted" }
+```
+
+The original notification disappears from the user's Notification Center. Idempotent — retracting a push the user already responded to is a no-op from their POV (their reply was already sent to you).
 
 ### Multi-session agents: correlate responses with `data`
 

@@ -41,6 +41,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    /// Clear the icon badge whenever the app comes to the foreground — but keep
+    /// the notifications themselves in Notification Center, so the user can still
+    /// scroll back to anything they haven't read.
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(0)
+        } else {
+            application.applicationIconBadgeNumber = 0
+        }
+    }
+
     func application(
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
@@ -59,20 +70,46 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
     }
 
-    // Silent push handler — backend sends one whenever an Agent's categories change.
+    // Silent push handler — backend sends one of these for several reasons.
     func application(
         _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
+        // 1. Category sync — agent created/updated a custom category.
         if (userInfo["type"] as? String) == "categories_updated" {
             Task { @MainActor in
                 await PushService.shared.refreshCategories()
                 completionHandler(.newData)
             }
-        } else {
-            completionHandler(.noData)
+            return
         }
+
+        // 2. Agent retracted a previous push — pull it from Notification Center
+        //    so the user doesn't act on a now-obsolete prompt.
+        if (userInfo["delete"] as? String) == "1",
+           let id = userInfo["id"] as? String {
+            Task { @MainActor in
+                let center = UNUserNotificationCenter.current()
+                // The original notification was scheduled with the message id
+                // as its identifier (or contains it in userInfo). Remove both
+                // by-identifier and by-userInfo to be safe.
+                center.removeDeliveredNotifications(withIdentifiers: [id])
+                let delivered = await center.deliveredNotifications()
+                let stragglers = delivered.compactMap { n -> String? in
+                    let info = n.request.content.userInfo
+                    return (info["message_id"] as? String) == id ? n.request.identifier : nil
+                }
+                if !stragglers.isEmpty {
+                    center.removeDeliveredNotifications(withIdentifiers: stragglers)
+                }
+                NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
+                completionHandler(.newData)
+            }
+            return
+        }
+
+        completionHandler(.noData)
     }
 
     // Show notifications even when app is in foreground.
