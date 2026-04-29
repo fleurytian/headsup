@@ -55,12 +55,23 @@ final class APIClient {
         return e
     }()
 
+    /// Resolve a path-with-query like "/v1/app/history?limit=100" to a URL
+    /// without percent-encoding the '?'. (URL.appendingPathComponent treats
+    /// the entire string as a path segment and turns '?' into %3F, which the
+    /// server then 404s.)
+    private func resolve(_ path: String) -> URL {
+        if let direct = URL(string: path, relativeTo: baseURL)?.absoluteURL {
+            return direct
+        }
+        return baseURL.appendingPathComponent(path)
+    }
+
     func post<T: Decodable, U: Encodable>(
         _ path: String,
         body: U,
         sessionToken: String? = nil
     ) async throws -> T {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        var req = URLRequest(url: resolve(path))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token = sessionToken {
@@ -71,7 +82,7 @@ final class APIClient {
     }
 
     func get<T: Decodable>(_ path: String, sessionToken: String? = nil) async throws -> T {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        var req = URLRequest(url: resolve(path))
         if let token = sessionToken {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -79,7 +90,7 @@ final class APIClient {
     }
 
     func delete(_ path: String, sessionToken: String? = nil) async throws {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        var req = URLRequest(url: resolve(path))
         req.httpMethod = "DELETE"
         if let token = sessionToken {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
