@@ -157,6 +157,7 @@ async def _send_and_update(message_id: str, device_token: str):
         message = session.get(PushMessage, message_id)
         if not message:
             return
+        agent = session.get(Agent, message.agent_id)
         ok, _reason = await send_push(
             device_token=device_token,
             title=message.title,
@@ -173,6 +174,8 @@ async def _send_and_update(message_id: str, device_token: str):
             group=message.group,
             url=message.url,
             auto_copy=message.auto_copy,
+            agent_id=agent.id if agent else None,
+            agent_name=agent.name if agent else None,
         )
         message.status = "delivered" if ok else "failed"
         if ok:

@@ -117,6 +117,8 @@ async def send_push(
     group: Optional[str] = None,
     url: Optional[str] = None,
     auto_copy: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    agent_name: Optional[str] = None,
 ) -> tuple[bool, str]:
     try:
         token = _get_apns_token()
@@ -167,6 +169,13 @@ async def send_push(
         payload["auto_copy"] = auto_copy
     if data:
         payload["data"] = data
+    # Sender identity for the iOS NSE to render as a Communication Notification
+    # (iOS 15+) — large avatar at the top of the banner, like an iMessage from
+    # the agent. Without these, NSE falls back to the right-side thumbnail.
+    if agent_id:
+        payload["agent_id"] = agent_id
+    if agent_name:
+        payload["agent_name"] = agent_name
 
     headers = {
         "authorization": f"bearer {token}",
