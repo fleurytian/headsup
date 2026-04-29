@@ -134,11 +134,39 @@ struct SettingsView: View {
 
                     SettingsSection(title: "about") {
                         VStack(alignment: .leading, spacing: 0) {
+                            SettingsKeyValue(key: "version", value: HU.versionString)
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            Link(destination: URL(string: "https://headsup.md")!) {
+                                HStack {
+                                    LText("项目主页", "Project page")
+                                        .font(HU.body()).foregroundStyle(HU.C.ink)
+                                    Spacer()
+                                    Text("headsup.md").font(HU.small()).foregroundStyle(HU.C.muted)
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(HU.C.muted)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
                             Link(destination: URL(string: "https://headsup.md/privacy")!) {
                                 HStack {
                                     LText("隐私政策", "Privacy Policy")
                                         .font(HU.body()).foregroundStyle(HU.C.ink)
                                     Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(HU.C.muted)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            Link(destination: URL(string: "mailto:hi@headsup.md")!) {
+                                HStack {
+                                    LText("联系我们", "Contact")
+                                        .font(HU.body()).foregroundStyle(HU.C.ink)
+                                    Spacer()
+                                    Text("hi@headsup.md").font(HU.small()).foregroundStyle(HU.C.muted)
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption.weight(.medium))
                                         .foregroundStyle(HU.C.muted)

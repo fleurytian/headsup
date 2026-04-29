@@ -4,6 +4,14 @@ import SwiftUI
 /// One accent. Strict 5-level type scale. No ornamental glyphs scattered around.
 enum HU {
 
+    /// "1.0.0 (1)" — bundle short version + build, read at runtime so we never
+    /// have to remember to update a constant.
+    static var versionString: String {
+        let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let b = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(v) (\(b))"
+    }
+
     // ── Palette (5 colors only) ──────────────────────────────────────────────
     enum C {
         static let bg     = Color(red: 0.973, green: 0.953, blue: 0.929)  // #F8F3ED 纸面

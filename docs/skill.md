@@ -1,5 +1,9 @@
 # HeadsUp — Interactive Push Skill
 
+`skill_version: 2026-04-29.3`  ·  `last_updated: 2026-04-29`
+
+> Bump `skill_version` when anything below changes substantively. Agents that cache this doc should compare the version and re-fetch on mismatch. The version is the first thing the doc reveals so a `HEAD` or first-line read is enough to decide.
+
 Send notifications to your user's iPhone with **tappable buttons**, and get the result back. Use when you need a yes/no, approve/reject, or pick-one decision **without** the user opening any app.
 
 ## When to use this
