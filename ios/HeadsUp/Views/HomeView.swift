@@ -5,6 +5,7 @@ struct HomeView: View {
     @EnvironmentObject var auth: AuthService
     @EnvironmentObject var deepLink: DeepLinkHandler
     @EnvironmentObject var loc: Localizer
+    @StateObject private var status = StatusMonitor.shared
     @State private var bindings: [AgentBinding] = []
     @State private var loading = false
     @State private var error: String?
@@ -20,6 +21,9 @@ struct HomeView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
+                            ForEach(status.activeIssues, id: \.self) { issue in
+                                StatusBanner(issue: issue).padding(.horizontal, 16)
+                            }
                             HStack {
                                 Eyebrow(text: "agents · \(bindings.count)")
                                 Spacer()
@@ -197,11 +201,93 @@ private struct AgentRow: View {
     }
 }
 
+/// One-line persistent banner that explains a current blocker (no notification
+/// permission, no network, etc.) and lets the user act on it. Shown at the top
+/// of HomeView so users see it before they wonder "why isn't anything coming
+/// through".
+struct StatusBanner: View {
+    let issue: StatusMonitor.Issue
+    @EnvironmentObject var loc: Localizer
+
+    private var content: (icon: String, zh: String, en: String, action: (() -> Void)?, actionLabel: (zh: String, en: String)?) {
+        switch issue {
+        case .notificationsDenied:
+            return (
+                "bell.slash.fill",
+                "通知权限被关了。HeadsUp 现在收不到任何 agent 的推送。",
+                "Notifications are off. HeadsUp can't deliver any pushes right now.",
+                { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } },
+                ("打开设置", "Open Settings")
+            )
+        case .notificationsNotDetermined:
+            return (
+                "bell.badge",
+                "请允许 HeadsUp 发送通知。否则 agent 联系不到你。",
+                "Allow HeadsUp to send notifications, or agents can't reach you.",
+                { Task { await PushService.shared.requestAuthorization() } },
+                ("允许", "Allow")
+            )
+        case .offline:
+            return (
+                "wifi.slash",
+                "无网络。下面的列表可能不是最新的。",
+                "Offline. The list below may be out of date.",
+                nil, nil
+            )
+        case .cellularRestricted:
+            return (
+                "antenna.radiowaves.left.and.right.slash",
+                "蜂窝数据被关了。Wi-Fi 不通时 HeadsUp 会失联。",
+                "Cellular is off for HeadsUp. Without Wi-Fi the app goes silent.",
+                { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } },
+                ("打开设置", "Open Settings")
+            )
+        }
+    }
+
+    var body: some View {
+        let c = content
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: c.icon)
+                .font(.callout)
+                .foregroundStyle(issue.isCritical ? HU.C.accent : HU.C.muted)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 8) {
+                LText(c.zh, c.en)
+                    .font(HU.small())
+                    .foregroundStyle(HU.C.ink)
+                    .lineSpacing(2)
+                if let action = c.action, let label = c.actionLabel {
+                    Button { action() } label: {
+                        Text(T(label.zh, label.en))
+                            .font(HU.small(.semibold))
+                            .foregroundStyle(HU.C.bg)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Capsule().fill(HU.C.ink))
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(issue.isCritical ? HU.C.accent.opacity(0.08) : HU.C.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(issue.isCritical ? HU.C.accent.opacity(0.4) : HU.C.line, lineWidth: 1)
+        )
+    }
+}
+
 struct EmptyAgentsView: View {
     @Binding var showAddAgent: Bool
     @EnvironmentObject var deepLink: DeepLinkHandler
     @EnvironmentObject var loc: Localizer
     @EnvironmentObject var auth: AuthService
+    @StateObject private var status = StatusMonitor.shared
     @State private var copiedInstruction = false
 
     private var instructionZH: String {
@@ -222,6 +308,16 @@ struct EmptyAgentsView: View {
                     LanguageToggle()
                 }
                 .padding(.horizontal, 32)
+
+                if !status.activeIssues.isEmpty {
+                    Spacer().frame(height: 16)
+                    VStack(spacing: 8) {
+                        ForEach(status.activeIssues, id: \.self) { issue in
+                            StatusBanner(issue: issue)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
 
                 Spacer().frame(height: 18)
 
