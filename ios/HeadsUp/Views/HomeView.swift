@@ -169,6 +169,14 @@ struct EmptyAgentsView: View {
     @Binding var showAddAgent: Bool
     @EnvironmentObject var deepLink: DeepLinkHandler
     @EnvironmentObject var loc: Localizer
+    @State private var copiedInstruction = false
+
+    private var instructionZH: String {
+        "请读一下这个 URL(是网页,不是本地文件):https://headsup.md/skill.md — 它是 HeadsUp 的协议文档,讲清楚怎么给我发可以一键回复的推送。读完按文档注册账号,再发给我它生成的授权链接。"
+    }
+    private var instructionEN: String {
+        "Read this URL (a public web page, not a local file): https://headsup.md/skill.md — it's the HeadsUp protocol, explaining how to send me push notifications I can reply to with one tap. Follow it: register yourself, then send me the authorization link it tells you to generate."
+    }
 
     var body: some View {
         ScrollView {
@@ -204,8 +212,46 @@ struct EmptyAgentsView: View {
 
                 VStack(alignment: .leading, spacing: 22) {
                     StepLine(num: "01",
-                             zh: "让你的 AI 读一下 https://headsup.md/skill.md",
-                             en: "Have your agent read https://headsup.md/skill.md")
+                             zh: "把这一整段指令发给你的 AI:",
+                             en: "Paste this whole instruction to your AI:")
+                }
+                .padding(.horizontal, 32)
+
+                Spacer().frame(height: 14)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    LText(instructionZH, instructionEN)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(HU.C.ink)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(HU.C.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(HU.C.line, lineWidth: 1)
+                        )
+                    Button {
+                        UIPasteboard.general.string = loc.lang == .zh ? instructionZH : instructionEN
+                        copiedInstruction = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedInstruction = false }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: copiedInstruction ? "checkmark" : "doc.on.doc")
+                                .font(.caption.weight(.medium))
+                            Text(copiedInstruction ? T("已复制", "Copied") : T("复制完整指令", "Copy full instruction"))
+                                .font(HU.small(.semibold))
+                        }
+                        .foregroundStyle(HU.C.bg)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(Capsule().fill(HU.C.ink))
+                    }
+                }
+                .padding(.horizontal, 32)
+
+                Spacer().frame(height: 28)
+
+                VStack(alignment: .leading, spacing: 22) {
                     StepLine(num: "02",
                              zh: "它会注册账号,然后发一个授权链接给你",
                              en: "It registers itself, then sends you an authorization link")
@@ -217,7 +263,7 @@ struct EmptyAgentsView: View {
 
                 Spacer().frame(height: 40)
 
-                PrimaryButton(title: T("添加 Agent", "Add Agent"), icon: "plus") {
+                PrimaryButton(title: T("我已经有授权链接", "I have an authorization link"), icon: "arrow.right") {
                     showAddAgent = true
                 }
                 .padding(.horizontal, 32)
