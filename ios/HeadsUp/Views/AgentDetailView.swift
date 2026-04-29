@@ -25,7 +25,14 @@ struct AgentDetailView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var revoking = false
+    @State private var deferring = false
+    @State private var showDeferConfirm = false
     @Environment(\.dismiss) var dismiss
+
+    /// Number of history rows that haven't been answered yet (excluding info_only).
+    private var unreadCount: Int {
+        history.filter { $0.button_id == nil && $0.category_id != "info_only" }.count
+    }
 
     var body: some View {
         ZStack {
@@ -57,6 +64,25 @@ struct AgentDetailView: View {
                         HStack {
                             Eyebrow(text: "history")
                             Spacer()
+                            if unreadCount > 0 {
+                                Button {
+                                    showDeferConfirm = true
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        if deferring {
+                                            ProgressView().scaleEffect(0.7).tint(HU.C.muted)
+                                        } else {
+                                            Image(systemName: "clock.fill")
+                                                .font(.caption2)
+                                        }
+                                        Text(T("一键清除未读 (\(unreadCount))",
+                                              "Defer \(unreadCount) unread"))
+                                            .font(HU.small(.semibold))
+                                    }
+                                    .foregroundStyle(HU.C.accent)
+                                }
+                                .disabled(deferring)
+                            }
                         }
                         .padding(.horizontal, 24)
 
@@ -129,6 +155,37 @@ struct AgentDetailView: View {
         // Refresh whenever a new push arrives or the user taps a button.
         .onReceive(NotificationCenter.default.publisher(for: .headsupHistoryChanged)) { _ in
             Task { await loadHistory() }
+        }
+        .alert(T("清除 \(unreadCount) 条未读?", "Defer \(unreadCount) unread?"),
+               isPresented: $showDeferConfirm) {
+            Button(T("取消", "Cancel"), role: .cancel) {}
+            Button(T("全部回复\"稍后再说\"", "Reply 'later' to all"), role: .destructive) {
+                Task { await deferAllUnread() }
+            }
+        } message: {
+            LText(
+                "会向 \(binding.agentName) 发送 \(unreadCount) 条 \"稍后再说\" 回应。无法撤回。",
+                "Sends \(unreadCount) 'later' replies to \(binding.agentName). Cannot be undone."
+            )
+        }
+    }
+
+    private func deferAllUnread() async {
+        guard let session = auth.session else { return }
+        deferring = true
+        defer { deferring = false }
+        struct Resp: Decodable { let deferred: Int }
+        struct Empty: Encodable {}
+        do {
+            let _: Resp = try await APIClient.shared.post(
+                "/v1/app/bindings/\(binding.agentId)/defer-all-unread",
+                body: Empty(),
+                sessionToken: session.sessionToken
+            )
+            await loadHistory()
+            NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 

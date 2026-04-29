@@ -193,6 +193,13 @@ private struct AgentRow: View {
                 Text(subtitle).font(HU.small()).foregroundStyle(HU.C.muted)
             }
             Spacer()
+            if let unread = binding.unreadCount, unread > 0 {
+                Text(unread > 99 ? "99+" : "\(unread)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(HU.C.bg)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Capsule().fill(HU.C.accent))
+            }
             Image(systemName: "chevron.right").font(.caption.weight(.medium)).foregroundStyle(HU.C.muted.opacity(0.7))
         }
         .padding(.horizontal, 16)

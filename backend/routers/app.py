@@ -247,6 +247,24 @@ def get_bindings(
             .order_by(PushMessage.created_at.desc())
             .limit(1)
         ).first()
+        # Unread = pushes with buttons (not info_only) that have no
+        # WebhookDelivery row yet — i.e. user hasn't tapped any button.
+        # `outerjoin` would be cleaner but SQLModel + simple select keeps it
+        # readable; the # of pushes per agent×user is small.
+        agent_messages = session.exec(
+            select(PushMessage).where(
+                PushMessage.agent_id == agent.id,
+                PushMessage.user_id == user.id,
+                PushMessage.category_id != "info_only",
+            )
+        ).all()
+        unread = 0
+        for m in agent_messages:
+            answered = session.exec(
+                select(WebhookDelivery).where(WebhookDelivery.message_id == m.id).limit(1)
+            ).first()
+            if not answered:
+                unread += 1
         result.append({
             "agent_id":         agent.id,
             "agent_name":       agent.name,
@@ -255,10 +273,77 @@ def get_bindings(
             "agent_type":       agent.agent_type,
             "bound_at":         b.bound_at,
             "last_message_at":  latest.created_at if latest else None,
+            "unread_count":     unread,
         })
     # Most recently active agents first, fall back to bind order.
     result.sort(key=lambda r: r.get("last_message_at") or r["bound_at"], reverse=True)
     return result
+
+
+@router.post("/bindings/{agent_id}/defer-all-unread")
+async def defer_all_unread(
+    agent_id: str,
+    background_tasks: BackgroundTasks,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Reply 'later' (稍后再说) to every unanswered push from this agent.
+
+    Used by the iOS 'one-click clear unread' button. Each reply still goes
+    through the full webhook/SSE delivery path so the agent sees them as
+    individual `button_id=later` events — no special bulk webhook shape.
+    Idempotent on the user's side: messages already replied to are skipped.
+    """
+    binding = session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.user_id == user.id,
+            AgentUserBinding.agent_id == agent_id,
+            AgentUserBinding.status == "active",
+        )
+    ).first()
+    if not binding:
+        raise HTTPException(404, "Binding not found")
+
+    messages = session.exec(
+        select(PushMessage).where(
+            PushMessage.agent_id == agent_id,
+            PushMessage.user_id == user.id,
+            PushMessage.category_id != "info_only",
+        )
+    ).all()
+    deferred = 0
+    for m in messages:
+        already = session.exec(
+            select(WebhookDelivery).where(WebhookDelivery.message_id == m.id).limit(1)
+        ).first()
+        if already:
+            continue
+        delivery = WebhookDelivery(
+            message_id=m.id,
+            agent_id=agent_id,
+            user_id=user.id,
+            user_key=user.user_key,
+            button_id="later",
+            button_label="稍后再说",
+            category_id=m.category_id,
+            data=m.data,
+        )
+        session.add(delivery)
+        session.commit()
+        session.refresh(delivery)
+        background_tasks.add_task(deliver_webhook, delivery.id)
+        await event_bus.publish(agent_id, {
+            "message_id": delivery.message_id,
+            "user_key": user.user_key,
+            "agent_id": agent_id,
+            "button_id": "later",
+            "button_label": "稍后再说",
+            "category_id": m.category_id,
+            "data": m.data,
+            "replied_at": delivery.created_at.isoformat(),
+        })
+        deferred += 1
+    return {"deferred": deferred}
 
 
 @router.delete("/bindings/{agent_id}", status_code=204)
