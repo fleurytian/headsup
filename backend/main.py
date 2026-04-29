@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import settings
@@ -38,7 +39,7 @@ def health():
     return {"status": "ok", "app": settings.app_name}
 
 
-@api.get("/skill.md", response_class=__import__("fastapi").responses.PlainTextResponse)
+@api.get("/skill.md", response_class=PlainTextResponse)
 def skill_md():
     """Agent-facing protocol doc. Agents WebFetch this on startup to learn HeadsUp."""
     from pathlib import Path
@@ -46,3 +47,209 @@ def skill_md():
     if p.exists():
         return p.read_text()
     return "Skill doc not found."
+
+
+_LANDING_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HeadsUp · md</title>
+<meta name="description" content="Let your agents give you a heads up by reading skill.md. Yes / No / Wait — without opening a thing.">
+<meta property="og:title" content="HeadsUp · md">
+<meta property="og:description" content="Let your agents give you a heads up by reading skill.md.">
+<meta property="og:url" content="https://headsup.md">
+<style>
+  :root {
+    --bg: #FFFDF8;
+    --ink: #1A1818;
+    --muted: #8B8580;
+    --line: #E8E2D5;
+    --accent: #6B60A8;
+    --card: #FAF6EC;
+  }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Display", system-ui, sans-serif;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 56px 32px 80px; }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
+    color: var(--muted); text-transform: lowercase;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .toggle {
+    display: inline-flex; gap: 0; padding: 2px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+  }
+  .toggle button {
+    border: 0; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    background: transparent; color: var(--muted);
+  }
+  .toggle button.on { background: var(--ink); color: var(--bg); }
+  .row { display: flex; align-items: center; justify-content: space-between; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); margin: 14px 0 30px; }
+  h1 {
+    font-size: 30px; font-weight: 800; line-height: 1.25;
+    margin: 0 0 14px; letter-spacing: -0.3px;
+  }
+  .lede { font-size: 17px; font-style: italic; color: var(--muted); margin: 0 0 44px; }
+  .rule {
+    display: flex; align-items: center; gap: 10px; margin: 36px 0 24px;
+    color: var(--muted);
+  }
+  .rule::before, .rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .rule span {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  .steps { display: flex; flex-direction: column; gap: 22px; margin: 0 0 44px; }
+  .step { display: flex; gap: 16px; }
+  .step .num {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+    color: var(--accent); min-width: 22px;
+  }
+  .step .body { color: var(--ink); opacity: 0.85; font-size: 15px; line-height: 1.55; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 40px; }
+  .btn {
+    padding: 13px 22px; border-radius: 999px; font-size: 15px;
+    font-weight: 500; text-decoration: none; transition: opacity 0.15s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--ink); color: var(--bg); }
+  .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  .copy {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px; display: flex; gap: 10px;
+    align-items: center; justify-content: space-between; margin-bottom: 32px;
+  }
+  .copy code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  .copy button {
+    background: var(--ink); color: var(--bg); border: 0; padding: 7px 14px;
+    border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer;
+    font-family: inherit;
+  }
+  footer {
+    color: var(--muted); font-size: 12px; margin-top: 56px;
+    padding-top: 24px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  footer a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+  footer a:hover { color: var(--ink); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row">
+    <span class="eyebrow">headsup · md</span>
+    <div class="toggle" role="tablist" aria-label="Language">
+      <button id="zh" type="button">ZH</button>
+      <button id="en" type="button" class="on">EN</button>
+    </div>
+  </div>
+
+  <div class="dot" aria-hidden="true"></div>
+
+  <div data-lang="en">
+    <h1>Let your agents<br>give you a heads up<br>by reading <span style="color:var(--accent)">skill.md</span>.</h1>
+    <p class="lede">Yes / No / Wait — without opening a thing.</p>
+  </div>
+  <div data-lang="zh" class="hidden">
+    <h1>让你的 AI<br>通过读 <span style="color:var(--accent)">skill.md</span><br>来给你提个醒。</h1>
+    <p class="lede">Yes / No / Wait — 不用打开任何 App。</p>
+  </div>
+
+  <div class="rule"><span data-lang="en">how it works</span><span data-lang="zh" class="hidden">怎么用</span></div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="num">01</div>
+      <div class="body">
+        <span data-lang="en">Hand <code class="mono">headsup.md/skill.md</code> to your agent (Claude Code, Codex, OpenClaw, Hermes…).</span>
+        <span data-lang="zh" class="hidden">把 <code class="mono">headsup.md/skill.md</code> 给你的 AI 助手读一下(Claude Code、Codex、OpenClaw、Hermes 等)。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">02</div>
+      <div class="body">
+        <span data-lang="en">It registers itself and sends you a <code class="mono">headsup://</code> authorization link.</span>
+        <span data-lang="zh" class="hidden">它会注册账号并发一个 <code class="mono">headsup://</code> 授权链接给你。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">03</div>
+      <div class="body">
+        <span data-lang="en">Tap once — now it can find you in your notification bar.</span>
+        <span data-lang="zh" class="hidden">点一下链接 → 在 App 里授权 → 它就能在通知栏找到你了。</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="copy">
+    <code>headsup.md/skill.md</code>
+    <button id="copyBtn" type="button" data-en="Copy" data-zh="复制">Copy</button>
+  </div>
+
+  <div class="actions">
+    <a class="btn btn-primary" href="/skill.md">
+      <span data-lang="en">Read skill.md</span>
+      <span data-lang="zh" class="hidden">阅读 skill.md</span>
+    </a>
+    <a class="btn btn-ghost" href="/docs">
+      <span data-lang="en">API docs</span>
+      <span data-lang="zh" class="hidden">API 文档</span>
+    </a>
+  </div>
+
+  <footer>
+    <span data-lang="en">A quiet protocol for interactive notifications.</span>
+    <span data-lang="zh" class="hidden">一个安静的交互式通知协议。</span>
+    <span>iOS · headsup.md</span>
+  </footer>
+</div>
+
+<script>
+(function() {
+  function setLang(lang) {
+    document.querySelectorAll('[data-lang]').forEach(el => {
+      el.classList.toggle('hidden', el.dataset.lang !== lang);
+    });
+    document.getElementById('zh').classList.toggle('on', lang === 'zh');
+    document.getElementById('en').classList.toggle('on', lang === 'en');
+    var btn = document.getElementById('copyBtn');
+    if (btn && !btn.dataset.copied) btn.textContent = btn.dataset[lang];
+    try { localStorage.setItem('headsup_lang', lang); } catch (e) {}
+  }
+  document.getElementById('zh').addEventListener('click', () => setLang('zh'));
+  document.getElementById('en').addEventListener('click', () => setLang('en'));
+  document.getElementById('copyBtn').addEventListener('click', function() {
+    navigator.clipboard.writeText('https://headsup.md/skill.md').then(() => {
+      var t = this.textContent;
+      this.dataset.copied = '1';
+      this.textContent = (document.getElementById('zh').classList.contains('on') ? '已复制' : 'Copied');
+      setTimeout(() => { delete this.dataset.copied; this.textContent = t; }, 1500);
+    });
+  });
+  var saved = null;
+  try { saved = localStorage.getItem('headsup_lang'); } catch (e) {}
+  var initial = saved || (navigator.language && navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en');
+  setLang(initial);
+})();
+</script>
+</body>
+</html>
+"""
+
+
+@api.get("/", response_class=HTMLResponse, include_in_schema=False)
+def landing():
+    return _LANDING_HTML

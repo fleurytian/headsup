@@ -29,7 +29,7 @@ targets:
               - headsup
         UIBackgroundModes:
           - remote-notification
-        ApiBaseURL: "http://192.168.5.153:8000"
+        ApiBaseURL: "https://headsup.md"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -39,12 +39,6 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: false
-          NSExceptionDomains:
-            "192.168.5.153":
-              NSExceptionAllowsInsecureHTTPLoads: true
-              NSIncludesSubdomains: false
     entitlements:
       path: HeadsUp/HeadsUp.entitlements
       properties:
