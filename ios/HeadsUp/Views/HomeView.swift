@@ -104,6 +104,9 @@ struct HomeView: View {
             .onChange(of: deepLink.pendingAuthorize?.id) { _ in
                 Task { await loadBindings() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                Task { await loadBindings() }
+            }
             .sheet(isPresented: $showAddAgent) {
                 AddAgentView()
             }

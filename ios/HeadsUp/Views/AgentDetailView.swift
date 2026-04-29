@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HistoryItem: Codable, Identifiable {
     let message_id: String
@@ -120,12 +121,28 @@ struct AgentDetailView: View {
         .navigationTitle("")
         .toolbarBackground(HU.C.bg, for: .navigationBar)
         .refreshable { await loadHistory() }
-        .task { await loadHistory() }
+        .task { await pollLoop() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            Task { await loadHistory() }
+        }
+    }
+
+    /// Background poll while this screen is visible. .task is cancelled when
+    /// the view disappears, so this stops automatically.
+    private func pollLoop() async {
+        await loadHistory()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
+            if Task.isCancelled { return }
+            await loadHistory()
+        }
     }
 
     private func loadHistory() async {
         guard let session = auth.session else { return }
-        loading = true
+        // Don't show the spinner on background polls — only on the first load
+        // (when history is still empty). Otherwise the screen flashes.
+        if history.isEmpty { loading = true }
         defer { loading = false }
         do {
             let result: [HistoryItem] = try await APIClient.shared.get(
@@ -134,7 +151,8 @@ struct AgentDetailView: View {
             )
             self.history = result
         } catch {
-            self.error = error.localizedDescription
+            // Silent on background polls — only set error if user-visible
+            if history.isEmpty { self.error = error.localizedDescription }
         }
     }
 
