@@ -69,11 +69,15 @@ struct Eyebrow: View {
     }
 }
 
-/// Solid ink-filled primary button.
+/// Solid ink-filled primary button. Reads `isEnabled` from the environment so
+/// `.disabled(true)` produces a properly-readable inactive state instead of a
+/// washed-out one (opacity dims text and bg together — bad).
 struct PrimaryButton: View {
     let title: String
     var icon: String? = nil
     let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
@@ -82,10 +86,11 @@ struct PrimaryButton: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .foregroundStyle(HU.C.bg)
-            .background(Capsule().fill(HU.C.ink))
+            .foregroundStyle(isEnabled ? HU.C.bg : HU.C.muted)
+            .background(Capsule().fill(isEnabled ? HU.C.ink : HU.C.line))
         }
         .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.12), value: isEnabled)
     }
 }
 
