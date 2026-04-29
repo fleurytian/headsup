@@ -32,6 +32,13 @@ struct HistoryView: View {
                     }
                     .padding(.horizontal, 24)
 
+                    if let error = error, items.isEmpty {
+                        Text(error)
+                            .font(HU.small())
+                            .foregroundStyle(HU.C.accent)
+                            .padding(.horizontal, 24)
+                    }
+
                     if loading && items.isEmpty {
                         ProgressView().frame(maxWidth: .infinity).tint(HU.C.muted)
                             .padding(.vertical, 40)
