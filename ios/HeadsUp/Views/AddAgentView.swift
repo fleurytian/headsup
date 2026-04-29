@@ -59,10 +59,10 @@ struct AddAgentView: View {
                         }
                         .padding(.horizontal, 24)
 
-                        PrimaryButton(title: T("打开授权", "Open authorization")) { tryParseAndOpen() }
+                        PrimaryButton(title: T("完成授权", "Authorize")) { tryParseAndOpen() }
                             .padding(.horizontal, 24)
                             .disabled(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .opacity(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+                            .opacity(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.65 : 1)
 
                         HairRule(label: "or")
                             .padding(.horizontal, 24)
