@@ -237,8 +237,27 @@ def get_bindings(
     result = []
     for b in bindings:
         agent = session.get(Agent, b.agent_id)
-        if agent:
-            result.append({"agent_id": agent.id, "agent_name": agent.name, "bound_at": b.bound_at})
+        if not agent:
+            continue
+        # Latest push timestamp lets the agent list sort by recency and
+        # show "active 3m ago" tags without an extra round trip per row.
+        latest = session.exec(
+            select(PushMessage)
+            .where(PushMessage.agent_id == agent.id, PushMessage.user_id == user.id)
+            .order_by(PushMessage.created_at.desc())
+            .limit(1)
+        ).first()
+        result.append({
+            "agent_id":         agent.id,
+            "agent_name":       agent.name,
+            "agent_logo_url":   agent.logo_url,
+            "agent_description": agent.description,
+            "agent_type":       agent.agent_type,
+            "bound_at":         b.bound_at,
+            "last_message_at":  latest.created_at if latest else None,
+        })
+    # Most recently active agents first, fall back to bind order.
+    result.sort(key=lambda r: r.get("last_message_at") or r["bound_at"], reverse=True)
     return result
 
 

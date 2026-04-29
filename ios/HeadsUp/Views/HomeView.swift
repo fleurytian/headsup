@@ -146,18 +146,47 @@ private struct AgentRow: View {
     let binding: AgentBinding
     @EnvironmentObject var loc: Localizer
 
+    private var subtitle: String {
+        if let last = binding.lastMessageAt {
+            let fmt = RelativeDateTimeFormatter()
+            fmt.unitsStyle = .abbreviated
+            return T(
+                "活跃于 \(fmt.localizedString(for: last, relativeTo: Date()))",
+                "active \(fmt.localizedString(for: last, relativeTo: Date()))"
+            )
+        }
+        let fmt = RelativeDateTimeFormatter()
+        fmt.unitsStyle = .abbreviated
+        return T(
+            "授权于 \(fmt.localizedString(for: binding.boundAt, relativeTo: Date()))",
+            "authorized \(fmt.localizedString(for: binding.boundAt, relativeTo: Date()))"
+        )
+    }
+
     var body: some View {
         HStack(spacing: 14) {
+            // Real logo when the agent set one; otherwise initial-on-accent.
             ZStack {
                 Circle().fill(HU.C.accent.opacity(0.12)).frame(width: 36, height: 36)
-                Text(String(binding.agentName.prefix(1)).uppercased())
-                    .font(HU.title(.heavy))
-                    .foregroundStyle(HU.C.accent)
+                if let urlStr = binding.agentLogoUrl, let url = URL(string: urlStr) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img.resizable().aspectRatio(contentMode: .fill)
+                                .frame(width: 36, height: 36).clipShape(Circle())
+                        default:
+                            Text(String(binding.agentName.prefix(1)).uppercased())
+                                .font(HU.title(.heavy)).foregroundStyle(HU.C.accent)
+                        }
+                    }
+                } else {
+                    Text(String(binding.agentName.prefix(1)).uppercased())
+                        .font(HU.title(.heavy)).foregroundStyle(HU.C.accent)
+                }
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(binding.agentName).font(HU.body(.medium)).foregroundStyle(HU.C.ink)
-                Text(binding.boundAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(HU.small()).foregroundStyle(HU.C.muted)
+                Text(subtitle).font(HU.small()).foregroundStyle(HU.C.muted)
             }
             Spacer()
             Image(systemName: "chevron.right").font(.caption.weight(.medium)).foregroundStyle(HU.C.muted.opacity(0.7))
