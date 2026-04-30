@@ -213,10 +213,10 @@ _LANDING_HTML = """<!doctype html>
   }
   .phone-mock .dots .dot.active { background: var(--ink); }
 
-  /* Hero carousel — outer rotation between the animated lock-screen mockup
-     and 5 real iOS screenshots. Inherits .scenario fade timing. */
-  .hero-carousel { max-width: 320px; margin: 0 auto; }
-  .hero-carousel .slot { display: none; }
+  /* Hero carousel — rotates through real iOS screenshots. Inherits
+     .scenario fade timing. */
+  .hero-carousel { max-width: 380px; margin: 0 auto; }
+  .hero-carousel .slot { display: none; margin: 0; }   /* zero <figure> default margin */
   .hero-carousel .slot.active { display: block; animation: fadeIn 0.5s ease; }
   .hero-carousel .shot img {
     width: 100%; height: auto; display: block;
