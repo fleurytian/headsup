@@ -60,6 +60,7 @@ targets:
     platform: iOS
     sources:
       - path: HeadsUpNotificationService
+      - path: HeadsUp/Services/SharedMessageStore.swift
     info:
       path: HeadsUpNotificationService/Info.plist
       properties:

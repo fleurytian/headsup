@@ -24,6 +24,7 @@ struct AgentDetailView: View {
     let binding: AgentBinding
 
     @State private var history: [HistoryItem] = []
+    @State private var agentBadges: [BadgeItem] = []
     @State private var loading = false
     @State private var error: String?
     @State private var revoking = false
@@ -71,6 +72,11 @@ struct AgentDetailView: View {
                         StatBox(value: "\(history.filter { $0.button_id != nil }.count)", label: "responded")
                     }
                     .padding(.horizontal, 24)
+
+                    if !agentBadges.isEmpty {
+                        AgentBadgeStrip(badges: agentBadges)
+                            .padding(.horizontal, 16)
+                    }
 
                     // History
                     VStack(alignment: .leading, spacing: 12) {
@@ -188,14 +194,14 @@ struct AgentDetailView: View {
         }
         .navigationTitle("")
         .toolbarBackground(HU.C.bg, for: .navigationBar)
-        .refreshable { await loadHistory() }
-        .task { await loadHistory() }
+        .refreshable { await loadAll() }
+        .task { await loadAll() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            Task { await loadHistory() }
+            Task { await loadAll() }
         }
         // Refresh whenever a new push arrives or the user taps a button.
         .onReceive(NotificationCenter.default.publisher(for: .headsupHistoryChanged)) { _ in
-            Task { await loadHistory() }
+            Task { await loadAll() }
         }
         .alert(T("清除 \(unreadCount) 条未读?", "Defer \(unreadCount) unread?"),
                isPresented: $showDeferConfirm) {
@@ -224,6 +230,12 @@ struct AgentDetailView: View {
                 "Clears unread on your side only — no reply is sent to \(binding.agentName)."
             )
         }
+    }
+
+    private func loadAll() async {
+        async let h: Void = loadHistory()
+        async let b: Void = loadAgentBadges()
+        _ = await (h, b)
     }
 
     private func deferAllUnread() async {
@@ -281,6 +293,19 @@ struct AgentDetailView: View {
             self.history = result
         } catch {
             if history.isEmpty { self.error = error.localizedDescription }
+        }
+    }
+
+    private func loadAgentBadges() async {
+        guard let session = auth.session else { return }
+        do {
+            let response: BadgesResponse = try await APIClient.shared.get(
+                "/v1/app/bindings/\(binding.agentId)/badges",
+                sessionToken: session.sessionToken
+            )
+            self.agentBadges = response.badges
+        } catch {
+            self.agentBadges = []
         }
     }
 
@@ -629,6 +654,52 @@ private struct BulkActionButton: View {
             .background(Capsule().strokeBorder(tint.opacity(0.5), lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct AgentBadgeStrip: View {
+    let badges: [BadgeItem]
+    @EnvironmentObject var loc: Localizer
+    @State private var selected: BadgeItem?
+
+    private var visible: [BadgeItem] { Array(badges.prefix(8)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Eyebrow(text: "badges")
+                Spacer()
+                Text("\(badges.count)")
+                    .font(HU.small(.semibold))
+                    .foregroundStyle(HU.C.muted)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(visible) { badge in
+                        Button {
+                            selected = badge
+                        } label: {
+                            VStack(spacing: 6) {
+                                BadgeSymbolMark(badge: badge, size: 46, iconSize: 20)
+                                Text(loc.lang == .zh ? badge.name_zh : badge.name_en)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(HU.C.muted)
+                                    .lineLimit(1)
+                                    .frame(width: 64)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+        .padding(14)
+        .card()
+        .sheet(item: $selected) { badge in
+            BadgeDetailSheet(badge: badge)
+                .presentationDetents([.medium])
+        }
     }
 }
 

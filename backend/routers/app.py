@@ -521,6 +521,56 @@ def mark_all_read(
     return {"marked": marked}
 
 
+@router.get("/bindings/{agent_id}/badges")
+def agent_badges_for_user(
+    agent_id: str,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Badges earned by one of the user's authorized agents.
+
+    This is user-facing, not the agent-authenticated `/v1/agents/me/badges`.
+    It only returns badges for an active binding the user owns.
+    """
+    binding = session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.user_id == user.id,
+            AgentUserBinding.agent_id == agent_id,
+            AgentUserBinding.status == "active",
+        )
+    ).first()
+    if not binding:
+        raise HTTPException(404, "Binding not found")
+
+    earned_rows = session.exec(
+        select(EarnedBadge).where(EarnedBadge.agent_id == agent_id)
+    ).all()
+    earned = {e.badge_id: e for e in earned_rows}
+    badges = session.exec(
+        select(BadgeRow).where(BadgeRow.scope.in_(["agent", "pair"]))
+    ).all()
+
+    out = []
+    for b in badges:
+        e = earned.get(b.id)
+        # User-facing agent badges should be a trophy shelf, not a full
+        # checklist. Hide unearned secret badges and omit unearned rows from
+        # the strip in the iOS detail page.
+        if not e:
+            continue
+        out.append({
+            "id": b.id,
+            "scope": b.scope,
+            "name_zh": b.name_zh, "name_en": b.name_en,
+            "description_zh": b.description_zh, "description_en": b.description_en,
+            "icon": b.icon,
+            "secret": b.secret,
+            "early": b.early,
+            "earned_at": e.earned_at.isoformat(),
+        })
+    return {"badges": out, "earned_count": len(out), "total_visible": len(out)}
+
+
 @router.delete("/bindings/{agent_id}", status_code=204)
 def revoke_binding(
     agent_id: str,

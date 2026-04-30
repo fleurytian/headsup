@@ -12,7 +12,7 @@ struct HomeView: View {
     @State private var showAddAgent = false
     @State private var todayStats: TodayStats? = nil
     @State private var clipboardLink: String? = nil
-    @State private var hasEverAuthorized = false  // for empty-state branching
+    @State private var hasEverAuthorized = UserDefaults.standard.bool(forKey: "headsup.hasEverAuthorizedAgent")
 
     var body: some View {
         NavigationStack {
@@ -73,50 +73,49 @@ struct HomeView: View {
                             )
                             .padding(.horizontal, 16)
 
-                            HStack(spacing: 6) {
-                                Spacer()
-                                Image(systemName: "arrow.down").font(.caption2)
-                                LText("拉下来刷新", "Pull to refresh")
-                                    .font(HU.small())
-                                Spacer()
+                            Button {
+                                showAddAgent = true
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "plus")
+                                        .font(.caption.weight(.semibold))
+                                    LText("添加 agent", "Add agent")
+                                        .font(HU.small(.semibold))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .foregroundStyle(HU.C.muted)
                             }
-                            .foregroundStyle(HU.C.muted)
+                            .buttonStyle(.plain)
                             .padding(.top, 4)
+                            .padding(.bottom, 88)
                         }
                         .padding(.vertical, 16)
+                    }
+                }
+
+                if !bindings.isEmpty || loading {
+                    VStack {
+                        Spacer()
+                        HomeBottomDock(showAddAgent: $showAddAgent)
+                            .padding(.horizontal, 28)
+                            .padding(.bottom, 14)
                     }
                 }
             }
             .navigationTitle("")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button { showAddAgent = true } label: {
-                        Image(systemName: "plus")
-                            .font(.headline)
-                            .foregroundStyle(HU.C.ink)
-                    }
-                }
                 ToolbarItem(placement: .principal) {
                     Text("HeadsUp")
                         .font(HU.title(.bold))
                         .foregroundStyle(HU.C.ink)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 18) {
-                        NavigationLink {
-                            HistoryView()
-                        } label: {
-                            Image(systemName: "clock")
-                                .font(.headline)
-                                .foregroundStyle(HU.C.ink)
-                        }
-                        NavigationLink {
-                            SettingsView()
-                        } label: {
-                            Image(systemName: "person")
-                                .font(.headline)
-                                .foregroundStyle(HU.C.ink)
-                        }
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.headline)
+                            .foregroundStyle(HU.C.ink)
                     }
                 }
             }
@@ -152,7 +151,11 @@ struct HomeView: View {
                 sessionToken: session.sessionToken
             )
             self.bindings = result
-            if !result.isEmpty { hasEverAuthorized = true }
+            if !result.isEmpty {
+                hasEverAuthorized = true
+                UserDefaults.standard.set(true, forKey: "headsup.hasEverAuthorizedAgent")
+                clipboardLink = nil
+            }
         } catch {
             self.error = error.localizedDescription
         }
@@ -175,6 +178,10 @@ struct HomeView: View {
     /// system toast — we only check on app foreground / view appear, not
     /// continuously.
     private func checkClipboard() {
+        guard !hasEverAuthorized, bindings.isEmpty else {
+            clipboardLink = nil
+            return
+        }
         let pb = UIPasteboard.general
         guard pb.hasStrings || pb.hasURLs else { clipboardLink = nil; return }
         let candidate: String? = {
@@ -221,6 +228,60 @@ struct HomeView: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+}
+
+private struct HomeBottomDock: View {
+    @Binding var showAddAgent: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 24) {
+            NavigationLink {
+                HistoryView()
+            } label: {
+                dockItem(icon: "clock", label: T("历史", "History"))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showAddAgent = true
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(HU.C.ink)
+                        .frame(width: 62, height: 62)
+                        .shadow(color: HU.C.ink.opacity(0.16), radius: 18, y: 8)
+                    Image(systemName: "plus")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(HU.C.bg)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(T("添加 agent", "Add agent"))
+
+            NavigationLink {
+                ProfileView()
+            } label: {
+                dockItem(icon: "person.crop.circle", label: T("我的", "Profile"))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule(style: .continuous))
+        .overlay(Capsule(style: .continuous).strokeBorder(HU.C.line.opacity(0.75), lineWidth: 1))
+    }
+
+    private func dockItem(icon: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+        }
+        .frame(width: 58)
+        .foregroundStyle(HU.C.ink)
     }
 }
 
