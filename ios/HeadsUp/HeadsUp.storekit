@@ -1,0 +1,77 @@
+{
+  "identifier" : "B8F94A22-1A7E-4E03-9B55-7C5B9A4AAB12",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "1A001",
+      "localizations" : [
+        {
+          "description" : "A small thank-you to the developer.",
+          "displayName" : "Tip — small",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "对开发者的一点点心意。",
+          "displayName" : "打赏 — 小",
+          "locale" : "zh_Hans"
+        }
+      ],
+      "productID" : "md.headsup.app.tip.small",
+      "referenceName" : "Tip Jar - small",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "1A002",
+      "localizations" : [
+        {
+          "description" : "Buy the developer a coffee.",
+          "displayName" : "Tip — medium",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "请开发者喝杯咖啡。",
+          "displayName" : "打赏 — 中",
+          "locale" : "zh_Hans"
+        }
+      ],
+      "productID" : "md.headsup.app.tip.medium",
+      "referenceName" : "Tip Jar - medium",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "1A003",
+      "localizations" : [
+        {
+          "description" : "Help keep HeadsUp alive a while longer.",
+          "displayName" : "Tip — large",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "让 HeadsUp 多撑一阵子。",
+          "displayName" : "打赏 — 大",
+          "locale" : "zh_Hans"
+        }
+      ],
+      "productID" : "md.headsup.app.tip.large",
+      "referenceName" : "Tip Jar - large",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
