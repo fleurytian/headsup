@@ -221,7 +221,13 @@ _LANDING_HTML = """<!doctype html>
   /* Hero carousel — rotates through real iOS screenshots. Inherits
      .scenario fade timing. Width tuned so image height roughly matches
      the left column's stacked content; tweak with the left col, not solo. */
-  .hero-carousel { max-width: 320px; margin: 0 auto; }
+  .hero-carousel {
+    max-width: 320px; margin: 0 auto;
+    /* iOS Safari otherwise interprets horizontal swipes as ambiguous and
+       co-fires page scroll. Yield vertical scroll, capture horizontal. */
+    touch-action: pan-y;
+    -webkit-user-select: none; user-select: none;
+  }
   .hero-carousel .slot { display: none; margin: 0; }   /* zero <figure> default margin */
   .hero-carousel .slot.active { display: block; animation: fadeIn 0.5s ease; }
   .hero-carousel .shot img {
