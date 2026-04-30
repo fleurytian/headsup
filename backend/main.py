@@ -352,7 +352,7 @@ _LANDING_HTML = """<!doctype html>
         <p class="lede">Yes / No / Wait — without opening a thing.</p>
       </div>
       <div data-lang="zh">
-        <h1>让你的 AI<br>给你发送可<br>回复选项的通知。</h1>
+        <h1>让你的 AI<br>给你发送<br>可回复选项的通知。</h1>
         <p class="lede">Yes / No / Wait — 不用打开任何 App。</p>
       </div>
 

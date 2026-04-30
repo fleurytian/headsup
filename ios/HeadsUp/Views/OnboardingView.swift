@@ -65,7 +65,7 @@ struct OnboardingView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     LText(
-                        "让你的 AI\n给你发送可\n回复选项的通知。",
+                        "让你的 AI\n给你发送\n可回复选项的通知。",
                         "Let your AI send you\nnotifications with\nreply options."
                     )
                     .font(.system(size: 28, weight: .heavy, design: .rounded))
