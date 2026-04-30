@@ -70,18 +70,17 @@ _LANDING_HTML = """<!doctype html>
 <meta property="og:description" content="Let your agents give you a heads up by reading skill.md.">
 <meta property="og:url" content="https://headsup.md">
 <script>
-// Always derive initial language from the visitor's system preference.
-// Previously we honored localStorage above system pref, but a user
-// whose first visit was from a default-EN browser saw EN locked even
-// after switching their OS to Chinese. The toggle still works during
-// the session; we just don't persist it across visits.
+// Initial language from the PRIMARY system language only (i.e.
+// `navigator.languages[0]`). Matching on any 'zh' anywhere in the
+// fallback chain mis-flips English-OS users whose browser keeps zh-CN
+// in its language list as a secondary preference. The toggle stays
+// session-only; we don't persist it across visits.
 (function() {
   var langs = navigator.languages && navigator.languages.length
     ? navigator.languages
     : [navigator.language || 'en'];
-  var system = langs.some(function(l) {
-    return String(l || '').toLowerCase().indexOf('zh') === 0;
-  }) ? 'zh' : 'en';
+  var primary = String(langs[0] || 'en').toLowerCase();
+  var system = primary.indexOf('zh') === 0 ? 'zh' : 'en';
   document.documentElement.dataset.langPref = system;
   document.documentElement.lang = system === 'zh' ? 'zh-CN' : 'en';
 })();
@@ -373,7 +372,9 @@ _LANDING_HTML = """<!doctype html>
     document.getElementById('en').classList.toggle('on', lang === 'en');
     var btn = document.getElementById('copyBtn');
     if (btn && !btn.dataset.copied) btn.textContent = btn.dataset[lang];
-    try { localStorage.setItem('headsup_lang', lang); } catch (e) {}
+    // Don't persist across visits — toggle is session-only. We saw a
+    // real user with English OS land on Chinese because some earlier
+    // visit had stored 'zh', and the global was sticky.
   }
   document.getElementById('zh').addEventListener('click', () => setLang('zh'));
   document.getElementById('en').addEventListener('click', () => setLang('en'));
@@ -385,12 +386,17 @@ _LANDING_HTML = """<!doctype html>
       setTimeout(() => { delete this.dataset.copied; this.textContent = t; }, 1500);
     });
   });
-  var saved = null;
-  try { saved = localStorage.getItem('headsup_lang'); } catch (e) {}
+  // Best-effort one-time cleanup of the legacy localStorage value so
+  // visitors who were stuck on the wrong language stop being stuck.
+  try { localStorage.removeItem('headsup_lang'); } catch (e) {}
+  // Initial language: PRIMARY system language only — i.e., what
+  // `navigator.languages[0]` reports. Previously we matched on any
+  // language in the list starting with "zh", which incorrectly flipped
+  // English-OS users with `zh-CN` somewhere in their fallback chain.
   var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
-  var system = langs.some(function(l) { return String(l || '').toLowerCase().indexOf('zh') === 0; }) ? 'zh' : 'en';
-  var initial = saved || system;
-  setLang(initial);
+  var primary = String(langs[0] || 'en').toLowerCase();
+  var system = primary.indexOf('zh') === 0 ? 'zh' : 'en';
+  setLang(system);
 })();
 </script>
 </body>
