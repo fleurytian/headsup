@@ -188,92 +188,16 @@ struct BadgeSymbolMark: View {
     let size: CGFloat
     let iconSize: CGFloat
 
-    private var isLongGame: Bool { !badge.early }
-
-    private var symbol: UIImage {
-        UIImage(systemName: badge.icon)
-        ?? UIImage(systemName: badge.earned ? "seal" : "lock")!
-    }
-
-    private var shapeInset: CGFloat { badge.secret ? 4 : 0 }
-
     var body: some View {
-        ZStack {
-            if isLongGame {
-                Hexagon()
-                    .fill(fill)
-                    .overlay(Hexagon().strokeBorder(stroke, lineWidth: badge.earned ? 1.5 : 1))
-                    .padding(shapeInset)
-            } else {
-                Circle()
-                    .fill(fill)
-                    .overlay(Circle().strokeBorder(stroke, lineWidth: badge.earned ? 1.5 : 1))
-                    .padding(shapeInset)
-            }
-
-            Image(uiImage: symbol)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(iconColor)
-                .symbolRenderingMode(.hierarchical)
-
-            if badge.secret {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Circle()
-                            .fill(badge.earned ? HU.C.ink : HU.C.muted.opacity(0.45))
-                            .frame(width: 7, height: 7)
-                    }
-                    Spacer()
-                }
-                .padding(10)
-            }
-        }
+        Text(badge.icon)
+            .font(.system(size: iconSize * 1.35))
+            .opacity(badge.earned ? 1 : 0.25)
+            .grayscale(badge.earned ? 0 : 1)
+            .frame(width: size, height: size)
+            .background(
+                Circle().fill(badge.earned ? HU.C.accent.opacity(0.10) : HU.C.line.opacity(0.5))
+            )
         .frame(width: size, height: size)
-        .opacity(badge.earned ? 1 : 0.58)
-    }
-
-    private var fill: Color {
-        if !badge.earned { return HU.C.line.opacity(0.45) }
-        return isLongGame ? HU.C.ink : HU.C.accent.opacity(0.10)
-    }
-
-    private var stroke: Color {
-        if !badge.earned { return HU.C.line }
-        return isLongGame ? HU.C.ink : HU.C.accent.opacity(0.45)
-    }
-
-    private var iconColor: Color {
-        if !badge.earned { return HU.C.muted.opacity(0.65) }
-        return isLongGame ? HU.C.bg : HU.C.accent
-    }
-}
-
-struct Hexagon: InsettableShape {
-    var insetAmount: CGFloat = 0
-
-    func path(in rect: CGRect) -> Path {
-        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
-        let w = r.width
-        let h = r.height
-        var p = Path()
-        p.move(to: CGPoint(x: r.midX, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.minY + h * 0.25))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.minY + h * 0.75))
-        p.addLine(to: CGPoint(x: r.midX, y: r.maxY))
-        p.addLine(to: CGPoint(x: r.minX, y: r.minY + h * 0.75))
-        p.addLine(to: CGPoint(x: r.minX, y: r.minY + h * 0.25))
-        p.closeSubpath()
-        _ = w
-        return p
-    }
-
-    func inset(by amount: CGFloat) -> some InsettableShape {
-        var s = self
-        s.insetAmount += amount
-        return s
     }
 }
 

@@ -69,6 +69,21 @@ _LANDING_HTML = """<!doctype html>
 <meta property="og:title" content="HeadsUp · md">
 <meta property="og:description" content="Let your agents give you a heads up by reading skill.md.">
 <meta property="og:url" content="https://headsup.md">
+<script>
+(function() {
+  var saved = null;
+  try { saved = localStorage.getItem('headsup_lang'); } catch (e) {}
+  var langs = navigator.languages && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || 'en'];
+  var system = langs.some(function(l) {
+    return String(l || '').toLowerCase().indexOf('zh') === 0;
+  }) ? 'zh' : 'en';
+  var initial = saved || system;
+  document.documentElement.dataset.langPref = initial;
+  document.documentElement.lang = initial === 'zh' ? 'zh-CN' : 'en';
+})();
+</script>
 <style>
   :root {
     --bg: #FFFDF8;
@@ -155,6 +170,8 @@ _LANDING_HTML = """<!doctype html>
   footer a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
   footer a:hover { color: var(--ink); }
   .hidden { display: none; }
+  html[data-lang-pref="zh"] [data-lang="en"],
+  html[data-lang-pref="en"] [data-lang="zh"] { display: none; }
 </style>
 </head>
 <body>
@@ -173,33 +190,33 @@ _LANDING_HTML = """<!doctype html>
     <h1>Let your agents<br>give you a heads up<br>by reading <span style="color:var(--accent)">skill.md</span>.</h1>
     <p class="lede">Yes / No / Wait — without opening a thing.</p>
   </div>
-  <div data-lang="zh" class="hidden">
+  <div data-lang="zh">
     <h1>让你的 AI<br>通过读 <span style="color:var(--accent)">skill.md</span><br>来给你提个醒。</h1>
     <p class="lede">Yes / No / Wait — 不用打开任何 App。</p>
   </div>
 
-  <div class="rule"><span data-lang="en">how it works</span><span data-lang="zh" class="hidden">怎么用</span></div>
+  <div class="rule"><span data-lang="en">how it works</span><span data-lang="zh">怎么用</span></div>
 
   <div class="steps">
     <div class="step">
       <div class="num">01</div>
       <div class="body">
         <span data-lang="en">Hand <code class="mono">headsup.md/skill.md</code> to your agent (Claude Code, Codex, OpenClaw, Hermes…).</span>
-        <span data-lang="zh" class="hidden">把 <code class="mono">headsup.md/skill.md</code> 给你的 AI 助手读一下(Claude Code、Codex、OpenClaw、Hermes 等)。</span>
+        <span data-lang="zh">把 <code class="mono">headsup.md/skill.md</code> 给你的 AI 助手读一下(Claude Code、Codex、OpenClaw、Hermes 等)。</span>
       </div>
     </div>
     <div class="step">
       <div class="num">02</div>
       <div class="body">
         <span data-lang="en">It registers itself and sends you a <code class="mono">headsup://</code> authorization link.</span>
-        <span data-lang="zh" class="hidden">它会注册账号并发一个 <code class="mono">headsup://</code> 授权链接给你。</span>
+        <span data-lang="zh">它会注册账号并发一个 <code class="mono">headsup://</code> 授权链接给你。</span>
       </div>
     </div>
     <div class="step">
       <div class="num">03</div>
       <div class="body">
         <span data-lang="en">Tap once — now it can find you in your notification bar.</span>
-        <span data-lang="zh" class="hidden">点一下链接 → 在 App 里授权 → 它就能在通知栏找到你了。</span>
+        <span data-lang="zh">点一下链接 → 在 App 里授权 → 它就能在通知栏找到你了。</span>
       </div>
     </div>
   </div>
@@ -212,17 +229,17 @@ _LANDING_HTML = """<!doctype html>
   <div class="actions">
     <a class="btn btn-primary" href="/skill.md">
       <span data-lang="en">Read skill.md</span>
-      <span data-lang="zh" class="hidden">阅读 skill.md</span>
+      <span data-lang="zh">阅读 skill.md</span>
     </a>
     <a class="btn btn-ghost" href="/docs">
       <span data-lang="en">API docs</span>
-      <span data-lang="zh" class="hidden">API 文档</span>
+      <span data-lang="zh">API 文档</span>
     </a>
   </div>
 
   <footer>
     <span data-lang="en">A quiet protocol for interactive notifications.</span>
-    <span data-lang="zh" class="hidden">一个安静的交互式通知协议。</span>
+    <span data-lang="zh">一个安静的交互式通知协议。</span>
     <span>iOS · headsup.md</span>
   </footer>
 </div>
@@ -230,6 +247,8 @@ _LANDING_HTML = """<!doctype html>
 <script>
 (function() {
   function setLang(lang) {
+    document.documentElement.dataset.langPref = lang;
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
     document.querySelectorAll('[data-lang]').forEach(el => {
       el.classList.toggle('hidden', el.dataset.lang !== lang);
     });
@@ -251,7 +270,9 @@ _LANDING_HTML = """<!doctype html>
   });
   var saved = null;
   try { saved = localStorage.getItem('headsup_lang'); } catch (e) {}
-  var initial = saved || (navigator.language && navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en');
+  var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+  var system = langs.some(function(l) { return String(l || '').toLowerCase().indexOf('zh') === 0; }) ? 'zh' : 'en';
+  var initial = saved || system;
   setLang(initial);
 })();
 </script>

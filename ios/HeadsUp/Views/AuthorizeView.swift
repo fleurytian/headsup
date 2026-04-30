@@ -18,6 +18,7 @@ struct AuthorizeView: View {
     @State private var working = false
     @State private var loadingInfo = true
     @State private var error: String?
+    @State private var linkBlocked = false
     @State private var done = false
     /// Apple App Review Guideline 5.1.2(i) (effective Nov 2025): the user
     /// must explicitly opt in before their replies are routed to a
@@ -77,7 +78,9 @@ struct AuthorizeView: View {
                             .lineSpacing(4)
                     }
 
-                    if !done {
+                    if linkBlocked {
+                        invalidLinkCard
+                    } else if !done {
                         VStack(alignment: .leading, spacing: 18) {
                             Eyebrow(text: "permissions")
                             VStack(alignment: .leading, spacing: 14) {
@@ -141,20 +144,22 @@ struct AuthorizeView: View {
                             .lineSpacing(4)
                     }
 
-                    if let error = error {
+                    if let error = error, !linkBlocked {
                         Text(error).font(HU.small()).foregroundStyle(HU.C.accent)
                     }
 
                     Spacer().frame(height: 8)
 
                     if !done {
-                        PrimaryButton(title: working ? "" : T("授权", "Authorize")) {
-                            Task { await confirm() }
+                        if !linkBlocked {
+                            PrimaryButton(title: working ? "" : T("授权", "Authorize")) {
+                                Task { await confirm() }
+                            }
+                            .overlay { if working { ProgressView().tint(HU.C.bg) } }
+                            .disabled(!canAuthorize)
                         }
-                        .overlay { if working { ProgressView().tint(HU.C.bg) } }
-                        .disabled(working || !consentToThirdParty)
 
-                        if !consentToThirdParty {
+                        if !linkBlocked && !consentToThirdParty {
                             LText(
                                 "需要先勾上同意,才能授权。",
                                 "Toggle the consent above before authorizing."
@@ -179,6 +184,10 @@ struct AuthorizeView: View {
         .task { await loadAgentInfo() }
     }
 
+    private var canAuthorize: Bool {
+        !working && !loadingInfo && !linkBlocked && consentToThirdParty
+    }
+
     private var typeLabel: String? {
         guard let t = agentInfo?.agent_type else { return nil }
         // mirror the AGENT_TYPES dict in backend
@@ -200,6 +209,32 @@ struct AuthorizeView: View {
             .font(HU.title(.heavy)).foregroundStyle(HU.C.accent)
     }
 
+    private var invalidLinkCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(HU.C.accent)
+                LText("授权链接不可用", "Authorization link unavailable")
+                    .font(HU.title(.heavy))
+                    .foregroundStyle(HU.C.ink)
+            }
+            Text(error ?? T("让 agent 重新发一个授权链接给你。",
+                            "Ask the agent to send you a fresh authorization link."))
+                .font(HU.body())
+                .foregroundStyle(HU.C.muted)
+                .lineSpacing(4)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(HU.C.card)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(HU.C.accent.opacity(0.35), lineWidth: 1)
+        )
+    }
+
     private func permissionRow(allowed: Bool, zh: String, en: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: allowed ? "checkmark" : "xmark")
@@ -213,38 +248,37 @@ struct AuthorizeView: View {
 
     private func loadAgentInfo() async {
         loadingInfo = true
+        linkBlocked = false
+        error = nil
         defer { loadingInfo = false }
-        // If the deep link carried only the token (the recommended canonical
-        // form), look up the agent_id from the token first. If it carried both,
-        // we can fetch the agent directly.
+        // Always validate the token before showing the consent flow. Legacy
+        // links may carry agent_id, but the token can still be expired or used.
         struct AuthRequestInfo: Codable {
             let token: String
             let agent: AgentPublic
             let expires_at: String?
         }
         do {
-            if pending.agentId.isEmpty {
-                let resp: AuthRequestInfo = try await APIClient.shared.get(
-                    "/v1/app/public/auth-requests/\(pending.token)"
-                )
-                self.agentInfo = resp.agent
-                // backfill agent_id so confirm() can use the existing endpoint
-                if var p = deepLink.pendingAuthorize {
-                    p.agentId = resp.agent.id
-                    deepLink.pendingAuthorize = p
-                }
-            } else {
-                let info: AgentPublic = try await APIClient.shared.get(
-                    "/v1/app/public/agents/\(pending.agentId)"
-                )
-                self.agentInfo = info
+            let resp: AuthRequestInfo = try await APIClient.shared.get(
+                "/v1/app/public/auth-requests/\(pending.token)"
+            )
+            self.agentInfo = resp.agent
+            // Backfill agent_id so downstream UI has the canonical agent id,
+            // even if the deep link carried only the token.
+            if var p = deepLink.pendingAuthorize {
+                p.agentId = resp.agent.id
+                deepLink.pendingAuthorize = p
             }
         } catch APIError.http(410, _) {
             self.error = T("授权链接已过期。让 agent 重新发一个给你。",
                            "This authorization link has expired. Ask the agent to send a fresh one.")
+            self.linkBlocked = true
+            self.consentToThirdParty = false
         } catch APIError.http(404, _), APIError.http(409, _) {
             self.error = T("链接已被使用过或无效。让 agent 重新发一个。",
                            "Link already used or invalid. Ask the agent to send a fresh one.")
+            self.linkBlocked = true
+            self.consentToThirdParty = false
         } catch {}
     }
 
@@ -259,9 +293,13 @@ struct AuthorizeView: View {
         } catch APIError.http(410, _) {
             self.error = T("授权链接已过期。让 agent 重新发一个给你。",
                            "This authorization link has expired. Ask the agent to send a fresh one.")
+            self.linkBlocked = true
+            self.consentToThirdParty = false
         } catch APIError.http(404, _) {
             self.error = T("链接已被使用过或无效。让 agent 重新发一个。",
                            "Link already used or invalid. Ask the agent to send a fresh one.")
+            self.linkBlocked = true
+            self.consentToThirdParty = false
         } catch APIError.http(401, _), APIError.http(403, _) {
             self.error = T("登录过期了,请回到主页重新登录后再试。",
                            "Your sign-in expired — sign in again on the home screen, then retry.")

@@ -355,6 +355,18 @@ def admin_dashboard(token: str = Query(default="")):
             return "n-warn"
         return "n-bad"
 
+    def _classify_webhook(rate: Optional[float]) -> str:
+        """Webhook delivery rate is only a real SLA breach when there's
+        actually stuck retry work (backlog > 0). A clean 0% with backlog 0
+        just means agents consume via SSE / polling, not webhook — that's
+        fine, not a fault. Keeping it red there cried wolf and trained
+        operators to ignore the dashboard."""
+        if rate is None:
+            return "n-na"
+        if wh_pending == 0:
+            return "n-ok"   # de-fanged: no stuck work means no fault
+        return _classify(rate)
+
     sla_rows: list[tuple[str, str, str, str, str]] = [
         ("Push delivery rate",
          f"<span class='{_classify(sla_24h['push_delivery_rate'])}'>{_pct(sla_24h['push_delivery_rate'])}</span>",
@@ -362,10 +374,10 @@ def admin_dashboard(token: str = Query(default="")):
          f"<span class='{_classify(sla_30d['push_delivery_rate'])}'>{_pct(sla_30d['push_delivery_rate'])}</span>",
          "APNs delivered / sent. Targets: 99% / 95%."),
         ("Webhook delivery rate",
-         f"<span class='{_classify(sla_24h['webhook_delivery_rate'])}'>{_pct(sla_24h['webhook_delivery_rate'])}</span>",
-         f"<span class='{_classify(sla_7d['webhook_delivery_rate'])}'>{_pct(sla_7d['webhook_delivery_rate'])}</span>",
-         f"<span class='{_classify(sla_30d['webhook_delivery_rate'])}'>{_pct(sla_30d['webhook_delivery_rate'])}</span>",
-         "Webhook posted to agent (excludes mark-as-read). Includes retries."),
+         f"<span class='{_classify_webhook(sla_24h['webhook_delivery_rate'])}'>{_pct(sla_24h['webhook_delivery_rate'])}</span>",
+         f"<span class='{_classify_webhook(sla_7d['webhook_delivery_rate'])}'>{_pct(sla_7d['webhook_delivery_rate'])}</span>",
+         f"<span class='{_classify_webhook(sla_30d['webhook_delivery_rate'])}'>{_pct(sla_30d['webhook_delivery_rate'])}</span>",
+         "Webhook posted to agent. 0% with backlog 0 = agents use SSE/polling, fine. Only worry when backlog > 0."),
         ("Reply rate",
          _pct(sla_24h['reply_rate']),
          _pct(sla_7d['reply_rate']),

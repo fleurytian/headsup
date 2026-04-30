@@ -34,6 +34,9 @@ final class DeepLinkHandler: ObservableObject {
     /// "Deferred deep link" — user tapped invite link → installed app → opened it
     /// → we resume the authorization automatically.
     func consumeClipboardIfPresent() {
+        guard !UserDefaults.standard.bool(forKey: "headsup.hasEverAuthorizedAgent") else {
+            return
+        }
         let pb = UIPasteboard.general
         guard pb.hasStrings || pb.hasURLs else { return }
         var candidate: String?
