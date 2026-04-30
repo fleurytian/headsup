@@ -132,22 +132,17 @@ struct SettingsView: View {
                         .card()
                     }
 
-                    SettingsSection(title: "you") {
+                    SettingsSection(title: "diagnostics") {
                         VStack(alignment: .leading, spacing: 0) {
-                            NavigationLink(destination: BadgesView()) {
-                                settingsRow(zh: "徽章", en: "Badges", icon: "rosette")
-                            }
-                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
-                            NavigationLink(destination: MyDataView()) {
-                                settingsRow(zh: "我的数据", en: "Your Data", icon: "chart.bar.fill")
-                            }
-                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
                             NavigationLink(destination: DiagnoseView()) {
                                 settingsRow(zh: "诊断", en: "Diagnose", icon: "stethoscope")
                             }
                         }
                         .card()
                     }
+                    // Badges + Stats moved to ProfileView (bottom dock → 我的)
+                    // — they're identity / engagement surfaces, not system
+                    // configuration, so they don't belong in Settings.
 
                     SettingsSection(title: "demo") {
                         DemoPushButton()
