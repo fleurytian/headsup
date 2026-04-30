@@ -22,6 +22,7 @@ struct ProfileView: View {
     @State private var bindingsCount: Int = 0
     @State private var showShareSheet = false
     @State private var sharePayload: ShareImagePayload?
+    @State private var selectedBadge: BadgeItem?
 
     var body: some View {
         ZStack {
@@ -84,6 +85,9 @@ struct ProfileView: View {
             if let p = sharePayload {
                 ShareInviteSheet(payload: p)
             }
+        }
+        .sheet(item: $selectedBadge) { b in
+            BadgeDetailSheet(badge: b)
         }
     }
 
@@ -157,9 +161,21 @@ struct ProfileView: View {
                     .card()
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(alignment: .top, spacing: 14) {
                         ForEach(preview) { b in
-                            BadgeSymbolMark(badge: b, size: 56, iconSize: 24)
+                            Button {
+                                selectedBadge = b
+                            } label: {
+                                VStack(spacing: 6) {
+                                    BadgeSymbolMark(badge: b, size: 56, iconSize: 24)
+                                    Text(loc.lang == .zh ? b.name_zh : b.name_en)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(HU.C.ink)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: 70)
+                                }
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 14)
@@ -252,6 +268,7 @@ struct ShareInviteSheet: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var loc: Localizer
     @State private var renderedImage: UIImage?
+    @State private var imageURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -265,9 +282,9 @@ struct ShareInviteSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                             .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
 
-                        if let img = renderedImage {
+                        if let img = renderedImage, let url = imageURL {
                             ShareLink(
-                                item: Image(uiImage: img),
+                                item: url,
                                 preview: SharePreview(
                                     payload.lang == .zh ? "HeadsUp 邀请" : "Join me on HeadsUp",
                                     image: Image(uiImage: img)
@@ -315,9 +332,22 @@ struct ShareInviteSheet: View {
             .frame(width: 1080, height: 1620)  // 2:3, prints clean on Stories / Twitter
             .background(Color(red: 0.973, green: 0.953, blue: 0.929))
         let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
+        renderer.scale = 1
         if let ui = renderer.uiImage {
             self.renderedImage = ui
+            self.imageURL = writeShareImage(ui)
+        }
+    }
+
+    private func writeShareImage(_ image: UIImage) -> URL? {
+        guard let data = image.pngData() else { return nil }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("headsup-invite-\(UUID().uuidString).png")
+        do {
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
         }
     }
 }

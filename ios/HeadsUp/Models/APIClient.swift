@@ -27,25 +27,42 @@ final class APIClient {
     }()
 
     private let session = URLSession.shared
+
+    /// Date formatters are expensive to construct (allocate inside CFLocale +
+    /// CFCalendar, parse format string). Building a new one per row when
+    /// decoding 50+ history items was hot in instruments. We build all four
+    /// of them once at process start, in the order most-likely-to-match
+    /// first so the average row only tries 1–2 formats.
+    private static let dateFormatters: [DateFormatter] = {
+        let formats = [
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ",
+            "yyyy-MM-dd'T'HH:mm:ssZZZZZ",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+            "yyyy-MM-dd'T'HH:mm:ss",
+        ]
+        return formats.map { fmt in
+            let f = DateFormatter()
+            f.dateFormat = fmt
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = fmt.contains("ZZZZZ") ? nil : TimeZone(identifier: "UTC")
+            return f
+        }
+    }()
+
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
-        // Backend may return ISO 8601 with or without timezone, with or without fractional seconds.
+        // Backend may return ISO 8601 with or without timezone, with or
+        // without fractional seconds. Use the shared formatter cache.
         d.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let str = try container.decode(String.self)
-            for fmt in [
-                "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ",
-                "yyyy-MM-dd'T'HH:mm:ssZZZZZ",
-                "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-                "yyyy-MM-dd'T'HH:mm:ss",
-            ] {
-                let f = DateFormatter()
-                f.dateFormat = fmt
-                f.locale = Locale(identifier: "en_US_POSIX")
-                f.timeZone = fmt.contains("ZZZZZ") ? nil : TimeZone(identifier: "UTC")
+            for f in APIClient.dateFormatters {
                 if let date = f.date(from: str) { return date }
             }
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date \(str)")
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date \(str)"
+            )
         }
         return d
     }()

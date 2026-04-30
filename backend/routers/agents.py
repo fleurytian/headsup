@@ -230,6 +230,8 @@ def my_badges(
             "name_en": b.name_en,
             "description_zh": b.description_zh,
             "description_en": b.description_en,
+            "criterion_zh": b.criterion_zh or "",
+            "criterion_en": b.criterion_en or "",
             "icon": b.icon,
             "scope": b.scope,
             "secret": b.secret,

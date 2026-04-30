@@ -158,6 +158,11 @@ class Badge(SQLModel, table=True):
     name_en: str
     description_zh: str
     description_en: str
+    # Concrete trigger condition. `description_*` is flavor; this answers
+    # "how do I unlock this." Leave blank if the description already does
+    # that job.
+    criterion_zh: str = Field(default="")
+    criterion_en: str = Field(default="")
     icon: str                                      # SF Symbol or emoji
     secret: bool = Field(default=False)
     early: bool = Field(default=False)             # surfaced as locked-list filter

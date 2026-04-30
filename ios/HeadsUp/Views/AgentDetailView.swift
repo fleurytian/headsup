@@ -37,6 +37,18 @@ struct AgentDetailView: View {
     @StateObject private var overrides = AgentOverrides.shared
     @Environment(\.dismiss) var dismiss
 
+    /// Pre-resolved button definitions per category, looked up *once* at
+    /// view load and refresh, instead of letting every HistoryRow do its
+    /// own UNUserNotificationCenter.getNotificationCategories() call. With
+    /// 50-row history that was up to 50 system queries per refresh; now
+    /// it's 1.
+    @State private var categoryButtons: [String: [HistoryRow.Action]] = [:]
+
+    /// Coalesce burst refresh events. Reply / mark-as-read / new-push /
+    /// foreground can fire in the same tick — debouncing avoids hitting
+    /// the API 4x for what's effectively one user-perceptible event.
+    @State private var historyRefreshTask: Task<Void, Never>?
+
     /// Number of history rows that haven't been answered yet (excluding info_only).
     private var unreadCount: Int {
         history.filter { $0.button_id == nil && $0.category_id != "info_only" }.count
@@ -120,9 +132,16 @@ struct AgentDetailView: View {
                                 .padding(.horizontal, 24)
                                 .padding(.vertical, 24)
                         } else {
-                            VStack(spacing: 0) {
+                            // LazyVStack — only renders visible rows; cheap
+                            // even at 200 history items. Plain VStack would
+                            // build everything (Markdown, contextMenu, button
+                            // task per row) up front on appear.
+                            LazyVStack(spacing: 0) {
                                 ForEach(Array(history.enumerated()), id: \.element.id) { idx, item in
-                                    HistoryRow(item: item)
+                                    HistoryRow(
+                                        item: item,
+                                        actions: categoryButtons[item.category_id] ?? []
+                                    )
                                     if idx < history.count - 1 {
                                         Rectangle().fill(HU.C.line).frame(height: 1)
                                             .padding(.leading, 16)
@@ -194,14 +213,19 @@ struct AgentDetailView: View {
         }
         .navigationTitle("")
         .toolbarBackground(HU.C.bg, for: .navigationBar)
-        .refreshable { await loadAll() }
-        .task { await loadAll() }
+        // Pull-to-refresh forces a full reload (categories + badges + history).
+        .refreshable { await loadAll(force: true) }
+        // First appearance: load everything in parallel.
+        .task { await loadAll(force: true) }
+        // Foreground: refresh history + categories (badges accumulate slowly,
+        // skip them — they're refetched on full pull-to-refresh).
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            Task { await loadAll() }
+            scheduleHistoryRefresh()
         }
-        // Refresh whenever a new push arrives or the user taps a button.
+        // Reply / mark-as-read / bulk-defer / new push: history-only refresh,
+        // debounced so a burst of events coalesces into one fetch.
         .onReceive(NotificationCenter.default.publisher(for: .headsupHistoryChanged)) { _ in
-            Task { await loadAll() }
+            scheduleHistoryRefresh()
         }
         .alert(T("清除 \(unreadCount) 条未读?", "Defer \(unreadCount) unread?"),
                isPresented: $showDeferConfirm) {
@@ -232,10 +256,40 @@ struct AgentDetailView: View {
         }
     }
 
-    private func loadAll() async {
+    /// Full reload — every data source. Used on initial appear and
+    /// pull-to-refresh. Runs the three fetches in parallel.
+    private func loadAll(force: Bool) async {
         async let h: Void = loadHistory()
         async let b: Void = loadAgentBadges()
-        _ = await (h, b)
+        async let c: Void = loadCategoryButtons()
+        _ = await (h, b, c)
+    }
+
+    /// Debounced history refresh. Bursts (e.g., webhook + foreground +
+    /// reply ack landing in the same tick) collapse to one API call.
+    private func scheduleHistoryRefresh() {
+        historyRefreshTask?.cancel()
+        historyRefreshTask = Task {
+            // 50ms is enough to coalesce a typical burst without feeling laggy.
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard !Task.isCancelled else { return }
+            await loadHistory()
+            historyRefreshTask = nil
+        }
+    }
+
+    /// Hoist `getNotificationCategories` to the parent — one call per
+    /// reload instead of per-row. Stored in `categoryButtons` and passed
+    /// down to HistoryRow.
+    private func loadCategoryButtons() async {
+        let cats = await withCheckedContinuation { cont in
+            UNUserNotificationCenter.current().getNotificationCategories { cont.resume(returning: $0) }
+        }
+        var result: [String: [HistoryRow.Action]] = [:]
+        for c in cats {
+            result[c.identifier] = c.actions.map { HistoryRow.Action(id: $0.identifier, title: $0.title) }
+        }
+        self.categoryButtons = result
     }
 
     private func deferAllUnread() async {
@@ -326,12 +380,31 @@ struct AgentDetailView: View {
 }
 
 struct HistoryRow: View {
+    /// Resolved button definition, hoisted out of UNUserNotificationCenter
+    /// at the parent level (AgentDetailView / HistoryView). HistoryRow
+    /// no longer queries iOS itself — it just reads what the parent gave it.
+    struct Action: Hashable {
+        let id: String
+        let title: String
+    }
+
     let item: HistoryItem
     var showAgentName: Bool = false
-    @State private var actions: [(id: String, title: String)] = []
+    /// Already-resolved buttons for this row's category. Empty array means
+    /// "no buttons / info_only". Plumbed in instead of fetched per-row.
+    var actions: [Action] = []
+
     @State private var sending: String? = nil      // button_id currently being sent
     @State private var localReply: String? = nil   // optimistic reply label
     @State private var copiedFeedback: Bool = false
+
+    /// Cached AttributedString — Markdown parse is expensive enough that
+    /// re-running it on every body redraw (button-state changes, copy
+    /// feedback flicker, parent refresh) was visible in instruments. We
+    /// compute it once when the row first appears and again only if
+    /// `item.body` actually changes.
+    @State private var renderedBodyCache: AttributedString = AttributedString()
+    @State private var plainBodyCache: String = ""
 
     private var displayedReply: String? { localReply ?? item.button_label }
 
@@ -346,26 +419,30 @@ struct HistoryRow: View {
     }
 
     /// Render the body as Markdown if it parses; fall back to plain otherwise.
-    /// `inlineOnlyAndDisableSubstitutions: true` means we don't try to make
-    /// links tappable inside the row (handled at the row level).
-    private var renderedBody: AttributedString {
-        // Strip the trailing hint suffix (added by server) before parsing —
-        // it's display chrome, not the agent's content.
-        var raw = item.body
+    /// Pure function so .task can call it once per row body. Strips the
+    /// server-appended hint suffix (long-press hint, info-only marker)
+    /// before parsing — it's display chrome, not the agent's content.
+    private static func renderBody(_ raw: String) -> (plain: String, rendered: AttributedString) {
+        var s = raw
         for suffix in [
             "  （长按选择回复）", "  (long-press to reply)",
             "  （仅通知，无需回复）", "  (notification only — no reply needed)",
         ] {
-            if raw.hasSuffix(suffix) {
-                raw = String(raw.dropLast(suffix.count))
+            if s.hasSuffix(suffix) {
+                s = String(s.dropLast(suffix.count))
                 break
             }
         }
-        if let attr = try? AttributedString(markdown: raw,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-            return attr
+        let rendered: AttributedString
+        if let attr = try? AttributedString(
+            markdown: s,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) {
+            rendered = attr
+        } else {
+            rendered = AttributedString(s)
         }
-        return AttributedString(raw)
+        return (s, rendered)
     }
 
     var body: some View {
@@ -384,17 +461,24 @@ struct HistoryRow: View {
         .contentShape(Rectangle())
         .contextMenu {
             Button {
-                UIPasteboard.general.string = plainBodyForCopy
+                UIPasteboard.general.string = plainBodyCache
             } label: {
                 Label(T("复制内容", "Copy"), systemImage: "doc.on.doc")
             }
             Button {
-                UIPasteboard.general.string = "\(item.title)\n\n\(plainBodyForCopy)"
+                UIPasteboard.general.string = "\(item.title)\n\n\(plainBodyCache)"
             } label: {
                 Label(T("复制标题+内容", "Copy with title"), systemImage: "doc.on.doc.fill")
             }
         }
-        .task { await loadActions() }
+        // Compute markdown + plain body once per row body. .task(id:)
+        // re-fires only when the body string itself changes (e.g. push
+        // edited mid-render — never happens today, but defensive).
+        .task(id: item.body) {
+            let (plain, rendered) = Self.renderBody(item.body)
+            self.plainBodyCache = plain
+            self.renderedBodyCache = rendered
+        }
     }
 
     @ViewBuilder
@@ -415,7 +499,7 @@ struct HistoryRow: View {
                 Spacer()
             }
             Text(item.title).font(HU.body(.semibold)).foregroundStyle(HU.C.ink)
-            Text(renderedBody).font(HU.small()).foregroundStyle(HU.C.muted)
+            Text(renderedBodyCache).font(HU.small()).foregroundStyle(HU.C.muted)
                 .lineSpacing(2).lineLimit(3)
             HStack(spacing: 6) {
                 Text(item.sent_at.formatted(date: .abbreviated, time: .shortened))
@@ -429,7 +513,7 @@ struct HistoryRow: View {
                 // Visible copy chip on EVERY row, regardless of reply state.
                 // Long-press contextMenu still works for "with title" variant.
                 Button {
-                    UIPasteboard.general.string = plainBodyForCopy
+                    UIPasteboard.general.string = plainBodyCache
                     copiedFeedback = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                         copiedFeedback = false
@@ -465,31 +549,6 @@ struct HistoryRow: View {
                 }
                 .padding(.top, 6)
             }
-        }
-    }
-
-    /// Body without the server-appended hint ("（长按选择回复）" etc.) — what the
-    /// user actually wants when they say "copy this".
-    private var plainBodyForCopy: String {
-        var s = item.body
-        for suffix in [
-            "  （长按选择回复）", "  (long-press to reply)",
-            "  （仅通知，无需回复）", "  (notification only — no reply needed)",
-        ] {
-            if s.hasSuffix(suffix) { s = String(s.dropLast(suffix.count)); break }
-        }
-        return s
-    }
-
-    private func loadActions() async {
-        guard displayedReply == nil, item.category_id != "info_only" else { return }
-        // Look up the category's buttons from the in-app registry
-        // (synced via silent push when the agent creates/changes a category).
-        let cats = await withCheckedContinuation { cont in
-            UNUserNotificationCenter.current().getNotificationCategories { cont.resume(returning: $0) }
-        }
-        if let cat = cats.first(where: { $0.identifier == item.category_id }) {
-            self.actions = cat.actions.map { ($0.identifier, $0.title) }
         }
     }
 

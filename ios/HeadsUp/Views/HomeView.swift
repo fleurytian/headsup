@@ -13,6 +13,10 @@ struct HomeView: View {
     @State private var todayStats: TodayStats? = nil
     @State private var clipboardLink: String? = nil
     @State private var hasEverAuthorized = UserDefaults.standard.bool(forKey: "headsup.hasEverAuthorizedAgent")
+    /// Coalesce burst refresh events. `.task`, foreground, deep-link change,
+    /// and `.headsupHistoryChanged` all fire reload — without debouncing,
+    /// a single user reply could trigger 3 simultaneous /bindings calls.
+    @State private var bindingsRefreshTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -120,24 +124,35 @@ struct HomeView: View {
                 }
             }
             .toolbarBackground(HU.C.bg, for: .navigationBar)
+            // Pull-to-refresh forces an immediate reload.
             .refreshable { await loadBindings() }
             .task { await loadBindings() }
+            // Other reload triggers go through the debouncer to coalesce
+            // bursts: a tap on a reply button can fire history-changed +
+            // foreground + deep-link in quick succession.
             .onChange(of: deepLink.pendingAuthorize?.id) { _ in
-                Task { await loadBindings() }
+                scheduleBindingsRefresh()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                Task { await loadBindings() }
+                scheduleBindingsRefresh()
             }
-            // Refresh as soon as a reply / mark-as-read / bulk-defer / new
-            // push event happens anywhere in the app — without this, the
-            // unread chip on the home row stays stale until pull-to-refresh
-            // or backgrounding the app.
             .onReceive(NotificationCenter.default.publisher(for: .headsupHistoryChanged)) { _ in
-                Task { await loadBindings() }
+                scheduleBindingsRefresh()
             }
             .sheet(isPresented: $showAddAgent) {
                 AddAgentView()
             }
+        }
+    }
+
+    /// Debounced reload — collapse bursts to a single API hit.
+    private func scheduleBindingsRefresh() {
+        bindingsRefreshTask?.cancel()
+        bindingsRefreshTask = Task {
+            try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+            guard !Task.isCancelled else { return }
+            await loadBindings()
+            bindingsRefreshTask = nil
         }
     }
 

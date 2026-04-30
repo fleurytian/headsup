@@ -1,10 +1,14 @@
 import SwiftUI
+import UserNotifications
 
 struct HistoryView: View {
     @EnvironmentObject var auth: AuthService
     @State private var items: [HistoryItem] = []
     @State private var loading = false
     @State private var error: String?
+    /// Resolved button definitions per category, hoisted out of HistoryRow
+    /// so we don't hit UNUserNotificationCenter once per row.
+    @State private var categoryButtons: [String: [HistoryRow.Action]] = [:]
 
     var body: some View {
         ZStack {
@@ -52,9 +56,15 @@ struct HistoryView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 50)
                     } else {
-                        VStack(spacing: 0) {
+                        // Lazy so longer histories (200+) don't pay the
+                        // markdown / contextMenu / button-task cost up front.
+                        LazyVStack(spacing: 0) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-                                HistoryRow(item: item, showAgentName: true)
+                                HistoryRow(
+                                    item: item,
+                                    showAgentName: true,
+                                    actions: categoryButtons[item.category_id] ?? []
+                                )
                                 if idx < items.count - 1 {
                                     Rectangle().fill(HU.C.line).frame(height: 1)
                                         .padding(.leading, 16)
@@ -99,6 +109,7 @@ struct HistoryView: View {
         guard let session = auth.session else { return }
         loading = true
         defer { loading = false }
+        async let categories: Void = loadCategoryButtons()
         do {
             let result: [HistoryItem] = try await APIClient.shared.get(
                 "/v1/app/history?limit=100",
@@ -108,5 +119,17 @@ struct HistoryView: View {
         } catch {
             self.error = error.localizedDescription
         }
+        await categories
+    }
+
+    private func loadCategoryButtons() async {
+        let cats = await withCheckedContinuation { cont in
+            UNUserNotificationCenter.current().getNotificationCategories { cont.resume(returning: $0) }
+        }
+        var result: [String: [HistoryRow.Action]] = [:]
+        for c in cats {
+            result[c.identifier] = c.actions.map { HistoryRow.Action(id: $0.identifier, title: $0.title) }
+        }
+        self.categoryButtons = result
     }
 }

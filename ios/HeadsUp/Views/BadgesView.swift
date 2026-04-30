@@ -7,9 +7,13 @@ struct BadgeItem: Codable, Identifiable {
     let name_en: String
     let description_zh: String
     let description_en: String
+    /// Concrete trigger condition. Server may omit / send empty for older
+    /// rows — we fall back to description in that case.
+    let criterion_zh: String?
+    let criterion_en: String?
     let icon: String
     let secret: Bool
-    let early: Bool
+    let early: Bool?
     let earned_at: String?
 
     var earned: Bool { earned_at != nil }
@@ -205,6 +209,14 @@ struct BadgeDetailSheet: View {
     let badge: BadgeItem
     @EnvironmentObject var loc: Localizer
 
+    private var criterion: String {
+        let zh = badge.criterion_zh ?? ""
+        let en = badge.criterion_en ?? ""
+        return loc.lang == .zh
+            ? (zh.isEmpty ? badge.description_zh : zh)
+            : (en.isEmpty ? badge.description_en : en)
+    }
+
     var body: some View {
         let name = loc.lang == .zh ? badge.name_zh : badge.name_en
         let desc = loc.lang == .zh ? badge.description_zh : badge.description_en
@@ -226,6 +238,31 @@ struct BadgeDetailSheet: View {
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
                     .padding(.horizontal, 32)
+
+                // Criterion line — explicit "how to earn" / "how it was
+                // earned" text. Frame depends on whether the user already
+                // has the badge.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(badge.earned
+                         ? T("怎么拿到的", "How you earned it")
+                         : T("怎么解锁", "How to unlock"))
+                        .font(HU.eyebrow())
+                        .tracking(2)
+                        .foregroundStyle(HU.C.muted)
+                    Text(criterion)
+                        .font(HU.body())
+                        .foregroundStyle(HU.C.ink.opacity(0.85))
+                        .lineSpacing(3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(HU.C.card)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(HU.C.line, lineWidth: 1)
+                )
+                .padding(.horizontal, 24)
 
                 if badge.earned, let earned = badge.earned_at {
                     Text(T("解锁于 \(formatDate(earned))",
