@@ -240,6 +240,66 @@ def _engagement_window(session: Session, since: datetime) -> dict:
     }
 
 
+def _top_agent_distribution(session: Session) -> list[dict]:
+    """Bucket active bindings by which "famous" agent name the agent has,
+    so we can see how the user base is split between Claude Code / Codex /
+    Hermes / OpenClaw / "other". Match is case-insensitive substring on
+    the agent name, mirroring services/agent_branding.default_accent_for.
+
+    Returns a list ordered by binding count desc, with a final "其他 / Other"
+    bucket aggregating everything else. No-binding agents are skipped.
+    """
+    rows = session.exec(
+        select(Agent.id, Agent.name).where(
+            Agent.id.in_(
+                select(AgentUserBinding.agent_id).where(
+                    AgentUserBinding.status == "active"
+                )
+            )
+        )
+    ).all()
+    # Count active bindings per agent
+    binding_counts: dict[str, int] = {}
+    for r in rows:
+        agent_id = r[0] if isinstance(r, tuple) else r.id
+        n = _count(
+            session, AgentUserBinding,
+            AgentUserBinding.agent_id == agent_id,
+            AgentUserBinding.status == "active",
+        )
+        binding_counts[agent_id] = n
+
+    # Bucket by known name pattern
+    buckets: dict[str, int] = {
+        "Claude Code": 0,
+        "Codex": 0,
+        "Hermes": 0,
+        "OpenClaw": 0,
+        "其他 / Other": 0,
+    }
+    for r in rows:
+        agent_id = r[0] if isinstance(r, tuple) else r.id
+        name_raw = (r[1] if isinstance(r, tuple) else r.name) or ""
+        name = name_raw.lower()
+        n = binding_counts.get(agent_id, 0)
+        if "claude" in name:
+            buckets["Claude Code"] += n
+        elif "codex" in name:
+            buckets["Codex"] += n
+        elif "hermes" in name:
+            buckets["Hermes"] += n
+        elif "openclaw" in name or "open claw" in name:
+            buckets["OpenClaw"] += n
+        else:
+            buckets["其他 / Other"] += n
+
+    return [
+        {"name": k, "count": v}
+        for k, v in sorted(buckets.items(), key=lambda kv: kv[1], reverse=True)
+        if v > 0 or k != "其他 / Other"  # always show the 4 known names
+    ]
+
+
 def _rejections_window(session: Session, since: datetime) -> dict:
     """How often /v1/push got rejected, broken out by reason."""
     quota = _count(
@@ -302,6 +362,8 @@ def admin_dashboard(token: str = Query(default="")):
         reject_7d  = _rejections_window(session, last_7d)
         reject_30d = _rejections_window(session, last_30d)
 
+        agent_buckets = _top_agent_distribution(session)
+
         pushes_24h = sla_24h["pushes"]
         pushes_7d  = sla_7d["pushes"]
         replies_24h = sla_24h["webhooks"]
@@ -314,12 +376,12 @@ def admin_dashboard(token: str = Query(default="")):
         reply_rate = (replies_total / pushes_total * 100.0) if pushes_total else 0.0
 
     rows = []
-    rows.append(("Total agents",      agents_total,    None))
-    rows.append(("Total users",       users_total,     None))
-    rows.append(("Active bindings",   bindings_total,  None))
-    rows.append(("Total pushes",      pushes_total,    f"24h: {pushes_24h} · 7d: {pushes_7d}"))
-    rows.append(("Total replies",     replies_total,   f"24h: {replies_24h}"))
-    rows.append(("Reply rate",        f"{reply_rate:.1f}%", None))
+    rows.append(("Agent 总数",        agents_total,    None))
+    rows.append(("用户总数",          users_total,     None))
+    rows.append(("活跃绑定",          bindings_total,  None))
+    rows.append(("推送总数",          pushes_total,    f"24小时: {pushes_24h} · 7天: {pushes_7d}"))
+    rows.append(("回复总数",          replies_total,   f"24小时: {replies_24h}"))
+    rows.append(("回复率",            f"{reply_rate:.1f}%", None))
 
     def _series_html(label: str, series: "OrderedDict[str, int]") -> str:
         values = list(series.values())
@@ -368,37 +430,37 @@ def admin_dashboard(token: str = Query(default="")):
         return _classify(rate)
 
     sla_rows: list[tuple[str, str, str, str, str]] = [
-        ("Push delivery rate",
+        ("推送投递率",
          f"<span class='{_classify(sla_24h['push_delivery_rate'])}'>{_pct(sla_24h['push_delivery_rate'])}</span>",
          f"<span class='{_classify(sla_7d['push_delivery_rate'])}'>{_pct(sla_7d['push_delivery_rate'])}</span>",
          f"<span class='{_classify(sla_30d['push_delivery_rate'])}'>{_pct(sla_30d['push_delivery_rate'])}</span>",
-         "APNs delivered / sent. Targets: 99% / 95%."),
-        ("Webhook delivery rate",
+         "APNs 投递成功 / 已发出。绿 ≥99%, 黄 ≥95%, 红 <95%。"),
+        ("Webhook 投递率",
          f"<span class='{_classify_webhook(sla_24h['webhook_delivery_rate'])}'>{_pct(sla_24h['webhook_delivery_rate'])}</span>",
          f"<span class='{_classify_webhook(sla_7d['webhook_delivery_rate'])}'>{_pct(sla_7d['webhook_delivery_rate'])}</span>",
          f"<span class='{_classify_webhook(sla_30d['webhook_delivery_rate'])}'>{_pct(sla_30d['webhook_delivery_rate'])}</span>",
-         "Webhook posted to agent. 0% with backlog 0 = agents use SSE/polling, fine. Only worry when backlog > 0."),
-        ("Reply rate",
+         "Webhook 推到 agent。0% + 积压 0 = agent 走 SSE/polling，不算故障；只有积压 >0 才该担心。"),
+        ("回复率",
          _pct(sla_24h['reply_rate']),
          _pct(sla_7d['reply_rate']),
          _pct(sla_30d['reply_rate']),
-         "User reply / push sent. Engagement health, not a hard SLA."),
-        ("Pushes failed",
+         "用户回复数 / 推送数。粘性指标，不是硬 SLA。"),
+        ("推送失败数",
          f"{sla_24h['pushes_failed']}",
          f"{sla_7d['pushes_failed']}",
          f"{sla_30d['pushes_failed']}",
-         "PushMessage with status=failed (APNs rejection)."),
-        ("Webhooks failed",
+         "PushMessage status=failed（APNs 拒收）。"),
+        ("Webhook 失败数",
          f"{sla_24h['webhooks_failed']}",
          f"{sla_7d['webhooks_failed']}",
          f"{sla_30d['webhooks_failed']}",
-         "Webhook hit retry cap and gave up."),
+         "重试上限耗尽后放弃投递的 webhook。"),
     ]
     sla_table_html = (
         "<table>"
         "<thead><tr>"
-        "<th>SLA metric</th><th class='num'>24h</th><th class='num'>7d</th><th class='num'>30d</th>"
-        "<th class='aux'>note</th>"
+        "<th>SLA 指标</th><th class='num'>24小时</th><th class='num'>7天</th><th class='num'>30天</th>"
+        "<th class='aux'>说明</th>"
         "</tr></thead><tbody>"
         + "".join(
             f"<tr><td>{name}</td>"
@@ -414,14 +476,42 @@ def admin_dashboard(token: str = Query(default="")):
     pending_color = "n-ok" if wh_pending == 0 else ("n-warn" if wh_pending < 5 else "n-bad")
     sla_extra_html = (
         f"<div class='kvrow'>"
-        f"<div class='kv'><span class='k'>Webhook pending backlog</span>"
+        f"<div class='kv'><span class='k'>Webhook 待重试积压</span>"
         f"<span class='v {pending_color}'>{wh_pending}</span>"
-        f"<span class='aux'>0 = healthy. Persistent &gt; 0 means an agent endpoint is unreachable.</span></div>"
-        f"<div class='kv'><span class='k'>Avg webhook attempts (7d)</span>"
+        f"<span class='aux'>0 = 健康。持续 &gt; 0 表示某 agent 的 webhook URL 不可达。</span></div>"
+        f"<div class='kv'><span class='k'>Webhook 平均重试次数 (7天)</span>"
         f"<span class='v'>{('—' if wh_avg_attempts is None else f'{wh_avg_attempts:.2f}')}</span>"
-        f"<span class='aux'>1.0 = first try always succeeds. Higher = flaky agents.</span></div>"
+        f"<span class='aux'>1.0 = 首次就成功。越高代表 agent 端越不稳定。</span></div>"
         f"</div>"
     )
+
+    # ── Top agents distribution ─────────────────────────────────────────────
+    if agent_buckets:
+        max_count = max((b["count"] for b in agent_buckets), default=1) or 1
+        agent_dist_html = (
+            "<table><thead><tr>"
+            "<th>Agent 类型</th><th class='num'>活跃绑定</th>"
+            "<th class='aux'>占比</th>"
+            "</tr></thead><tbody>"
+            + "".join(
+                f"<tr><td>{b['name']}</td>"
+                f"<td class='num'>{b['count']}</td>"
+                f"<td class='aux'>"
+                f"<div style='display:flex;align-items:center;gap:8px;'>"
+                f"<div style='flex:1;height:6px;background:#E8E2D5;border-radius:3px;overflow:hidden;'>"
+                f"<div style='width:{(b['count']/max_count*100):.0f}%;height:100%;background:#6B60A8;'></div>"
+                f"</div>"
+                f"<span style='font-variant-numeric:tabular-nums;min-width:42px;text-align:right;'>"
+                f"{(b['count']/sum(x['count'] for x in agent_buckets)*100 if sum(x['count'] for x in agent_buckets) else 0):.0f}%"
+                f"</span>"
+                f"</div>"
+                f"</td></tr>"
+                for b in agent_buckets
+            )
+            + "</tbody></table>"
+        )
+    else:
+        agent_dist_html = "<p class='aux'>暂无 agent 绑定数据。</p>"
 
     # ── Auth funnel table ────────────────────────────────────────────────────
     def _funnel_row(label: str, key: str, fmt=str, note: str = "") -> str:
@@ -436,13 +526,13 @@ def admin_dashboard(token: str = Query(default="")):
 
     funnel_html = (
         "<table><thead><tr>"
-        "<th>Auth funnel</th><th class='num'>24h</th><th class='num'>7d</th>"
-        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "<th>授权漏斗</th><th class='num'>24小时</th><th class='num'>7天</th>"
+        "<th class='num'>30天</th><th class='aux'>说明</th>"
         "</tr></thead><tbody>"
-        + _funnel_row("Auth links created",  "created", note="Agent called /v1/agents/auth-links or /authorize/initiate.")
-        + _funnel_row("Auth links used (bound)", "used", note="User completed Authorize tap → binding created.")
-        + _funnel_row("Conversion rate", "conversion_rate", _pct, note="Users who saw an auth link and actually bound. Target ≥ 70%.")
-        + _funnel_row("Expired without use", "expired_unused", note="Token went past 30-min TTL; user never tapped.")
+        + _funnel_row("授权链接创建",  "created", note="agent 调用 /v1/agents/auth-links 或 /authorize/initiate。")
+        + _funnel_row("链接被使用 (已绑定)", "used", note="用户完成 Authorize 点击 → 创建绑定。")
+        + _funnel_row("转化率", "conversion_rate", _pct, note="拿到授权链接后真的去绑定的用户占比。目标 ≥ 70%。")
+        + _funnel_row("过期未用", "expired_unused", note="token 超出 30 分钟 TTL,用户没点。")
         + "</tbody></table>"
     )
 
@@ -453,80 +543,80 @@ def admin_dashboard(token: str = Query(default="")):
 
     binding_html = (
         "<table><thead><tr>"
-        "<th>Binding lifecycle</th><th class='num'>24h</th><th class='num'>7d</th>"
-        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "<th>绑定生命周期</th><th class='num'>24小时</th><th class='num'>7天</th>"
+        "<th class='num'>30天</th><th class='aux'>说明</th>"
         "</tr></thead><tbody>"
-        + f"<tr><td>New bindings</td>"
+        + f"<tr><td>新增绑定</td>"
           f"<td class='num'>{binding_24h['new']}</td>"
           f"<td class='num'>{binding_7d['new']}</td>"
           f"<td class='num'>{binding_30d['new']}</td>"
-          f"<td class='aux'>Authorize tap → binding row created (active).</td></tr>"
-        + f"<tr><td>Revocations</td>"
+          f"<td class='aux'>用户点 Authorize → 创建 active binding。</td></tr>"
+        + f"<tr><td>撤销数</td>"
           f"<td class='num'>{binding_24h['revoked']}</td>"
           f"<td class='num'>{binding_7d['revoked']}</td>"
           f"<td class='num'>{binding_30d['revoked']}</td>"
-          f"<td class='aux'>User swiped left → revoke. Includes deleted accounts.</td></tr>"
-        + "<tr><td>Net change</td>"
+          f"<td class='aux'>用户左滑撤销;含删账号造成的撤销。</td></tr>"
+        + "<tr><td>净变化</td>"
           + _net_cell(binding_24h['net'])
           + _net_cell(binding_7d['net'])
           + _net_cell(binding_30d['net'])
-          + "<td class='aux'>new − revoked. Negative over 30d = churn.</td></tr>"
+          + "<td class='aux'>新增 − 撤销。30 天为负 = 流失。</td></tr>"
         + "</tbody></table>"
     )
 
     # ── Engagement table ─────────────────────────────────────────────────────
     engage_html = (
         "<table><thead><tr>"
-        "<th>Engagement</th><th class='num'>24h</th><th class='num'>7d</th>"
-        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "<th>用户活跃</th><th class='num'>24小时</th><th class='num'>7天</th>"
+        "<th class='num'>30天</th><th class='aux'>说明</th>"
         "</tr></thead><tbody>"
-        + f"<tr><td>Active users</td>"
+        + f"<tr><td>活跃用户</td>"
           f"<td class='num'>{engage_24h['active_users']}</td>"
           f"<td class='num'>{engage_7d['active_users']}</td>"
           f"<td class='num'>{engage_30d['active_users']}</td>"
-          f"<td class='aux'>Distinct users with at least one app_opened event.</td></tr>"
-        + f"<tr><td>Bulk mark-as-read</td>"
+          f"<td class='aux'>有过 app_opened 事件的不同用户数。</td></tr>"
+        + f"<tr><td>一键已读次数</td>"
           f"<td class='num'>{engage_24h['bulk_marked_read']}</td>"
           f"<td class='num'>{engage_7d['bulk_marked_read']}</td>"
           f"<td class='num'>{engage_30d['bulk_marked_read']}</td>"
-          f"<td class='aux'>Times users hit '一键已读'. High → users feel pings are noise.</td></tr>"
-        + f"<tr><td>Delete-account canceled</td>"
+          f"<td class='aux'>用户用 \"一键已读\" 的次数。高 = 用户觉得推送太烦。</td></tr>"
+        + f"<tr><td>删账号又取消</td>"
           f"<td class='num'>{engage_24h['deletes_canceled']}</td>"
           f"<td class='num'>{engage_7d['deletes_canceled']}</td>"
           f"<td class='num'>{engage_30d['deletes_canceled']}</td>"
-          f"<td class='aux'>Users who opened the delete dialog but backed out.</td></tr>"
+          f"<td class='aux'>打开删账号对话框但点取消的人。</td></tr>"
         + "</tbody></table>"
     )
 
     # ── Rejections table ─────────────────────────────────────────────────────
     reject_html = (
         "<table><thead><tr>"
-        "<th>Push rejections</th><th class='num'>24h</th><th class='num'>7d</th>"
-        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "<th>推送被拒</th><th class='num'>24小时</th><th class='num'>7天</th>"
+        "<th class='num'>30天</th><th class='aux'>说明</th>"
         "</tr></thead><tbody>"
-        + f"<tr><td>USER_MUTED (app-wide DND)</td>"
+        + f"<tr><td>USER_MUTED (用户全局 DND)</td>"
           f"<td class='num'>{reject_24h['user_muted']}</td>"
           f"<td class='num'>{reject_7d['user_muted']}</td>"
           f"<td class='num'>{reject_30d['user_muted']}</td>"
-          f"<td class='aux'>Pushes blocked because user has global DND on.</td></tr>"
-        + f"<tr><td>AGENT_MUTED (per-agent silence)</td>"
+          f"<td class='aux'>用户开了全局免打扰。</td></tr>"
+        + f"<tr><td>AGENT_MUTED (单 agent 静音)</td>"
           f"<td class='num'>{reject_24h['agent_muted']}</td>"
           f"<td class='num'>{reject_7d['agent_muted']}</td>"
           f"<td class='num'>{reject_30d['agent_muted']}</td>"
-          f"<td class='aux'>Pushes blocked because user muted that specific agent.</td></tr>"
-        + f"<tr><td>AGENT_QUOTA_EXCEEDED</td>"
+          f"<td class='aux'>用户单独把这个 agent 静音了。</td></tr>"
+        + f"<tr><td>AGENT_QUOTA_EXCEEDED (配额耗尽)</td>"
           f"<td class='num'>{reject_24h['quota_exceeded']}</td>"
           f"<td class='num'>{reject_7d['quota_exceeded']}</td>"
           f"<td class='num'>{reject_30d['quota_exceeded']}</td>"
-          f"<td class='aux'>Pushes blocked because agent hit free-tier monthly cap.</td></tr>"
+          f"<td class='aux'>agent 用完免费层月度配额。</td></tr>"
         + "</tbody></table>"
     )
 
     sparks_html = "".join([
-        _series_html("DAU (app opens)", dau),
-        _series_html("Pushes / day",    push_per_day),
-        _series_html("Replies / day",   reply_per_day),
-        _series_html("New bindings/d",  auth_per_day),
+        _series_html("DAU (打开 app 用户)",   dau),
+        _series_html("每日推送量",            push_per_day),
+        _series_html("每日回复量",            reply_per_day),
+        _series_html("每日新增绑定",          auth_per_day),
     ])
 
     return f"""<!doctype html>
@@ -578,30 +668,33 @@ def admin_dashboard(token: str = Query(default="")):
   .kv .aux {{ font-size: 11px; color: #8B8580; line-height: 1.4; }}
 </style></head>
 <body>
-  <h1>HeadsUp · Admin</h1>
-  <div class='meta'>generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</div>
+  <h1>HeadsUp · 后台</h1>
+  <div class='meta'>生成于 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</div>
 
-  <div class='section'>Totals</div>
+  <div class='section'>总览</div>
   <table>{rows_html}</table>
 
-  <div class='section'>Service health · SLA</div>
+  <div class='section'>服务健康度 · SLA</div>
   {sla_table_html}
   {sla_extra_html}
 
-  <div class='section'>Auth funnel</div>
+  <div class='section'>主流 Agent 分布</div>
+  {agent_dist_html}
+
+  <div class='section'>授权漏斗</div>
   {funnel_html}
 
-  <div class='section'>Binding lifecycle</div>
+  <div class='section'>绑定生命周期</div>
   {binding_html}
 
-  <div class='section'>Engagement</div>
+  <div class='section'>用户活跃</div>
   {engage_html}
 
-  <div class='section'>Push rejections (limits triggered)</div>
+  <div class='section'>推送拦截</div>
   {reject_html}
 
-  <div class='section'>Trends · last 14d</div>
+  <div class='section'>趋势 · 最近 14 天</div>
   {sparks_html}
 
-  <div class='footer'>Read-only. Refresh the page for fresh numbers.</div>
+  <div class='footer'>只读。刷新页面看最新数据。</div>
 </body></html>"""

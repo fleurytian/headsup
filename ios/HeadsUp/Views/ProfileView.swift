@@ -20,7 +20,11 @@ struct ProfileView: View {
     @State private var data: MyDataPayload?
     @State private var badges: BadgesResponse?
     @State private var bindingsCount: Int = 0
-    @State private var showShareSheet = false
+    /// Setting this presents the share sheet — using `.sheet(item:)` with
+    /// an Identifiable payload instead of the prior `isPresented + opt`
+    /// pair, which had a SwiftUI race where the sheet body sometimes
+    /// rendered before the payload was set, blanking the sheet (Codex
+    /// caught this).
     @State private var sharePayload: ShareImagePayload?
     @State private var selectedBadge: BadgeItem?
 
@@ -48,7 +52,6 @@ struct ProfileView: View {
                     // ── Share invite ───────────────────────────────────────
                     Button {
                         sharePayload = makeSharePayload()
-                        showShareSheet = true
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "square.and.arrow.up")
@@ -81,10 +84,8 @@ struct ProfileView: View {
         .toolbarBackground(HU.C.bg, for: .navigationBar)
         .task { await load() }
         .refreshable { await load() }
-        .sheet(isPresented: $showShareSheet) {
-            if let p = sharePayload {
-                ShareInviteSheet(payload: p)
-            }
+        .sheet(item: $sharePayload) { p in
+            ShareInviteSheet(payload: p)
         }
         .sheet(item: $selectedBadge) { b in
             BadgeDetailSheet(badge: b)
@@ -251,7 +252,8 @@ struct ProfileView: View {
 
 // ── Share invite ────────────────────────────────────────────────────────────
 
-struct ShareImagePayload {
+struct ShareImagePayload: Identifiable {
+    let id = UUID()
     let received: Int
     let replied: Int
     let responseRatePct: Int?

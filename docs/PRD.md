@@ -113,7 +113,7 @@ Agent calls `POST /v1/push/<message_id>/retract` → server sends a silent push 
 - SDK: single-file Python (`requests`-only); JS planned
 
 ### Production
-- Aliyun HK Simple Application Server, $8/mo. SSH on port 22022 (Aliyun's anti-DDoS scrubbing on 22 is unfixable). Long-term: migrate to Hetzner SG / DigitalOcean SG (Codex's recommendation; SSH headache goes away).
+- Aliyun HK Simple Application Server, $8/mo. SSH listens on a non-default port to dodge Aliyun's port-22 anti-DDoS scrubbing. Long-term: migrate to Hetzner SG / DigitalOcean SG (Codex's recommendation; SSH headache goes away).
 - Domain `headsup.md` via nic.md → Cloudflare DNS (proxy off, DNS only) → Aliyun.
 - Let's Encrypt via certbot; auto-renew via cron.
 - One-worker uvicorn (in-process pub/sub for SSE; switch to Redis pub/sub when we need >1).
@@ -343,8 +343,8 @@ Sources: Apple developer news 2025-11-13, App Review Guidelines 5.1.2(i) +
 - Apple Developer Team: `N74WZGGX8W`
 - iOS Bundle ID: `md.headsup.app`
 - APNs Key: `576B75C7U9` (`.p8` in `~/projects/headsup/backend/secrets/`, gitignored)
-- Code: <https://github.com/fleurytian/headsup> (private)
-- Server: Aliyun HK 47.83.199.33, $8/mo
+- Code: <https://github.com/fleurytian/headsup> (public, AGPL-3.0)
+- Server: Aliyun HK SWAS, $8/mo (IP looked up via DNS on `headsup.md`)
 - Server credentials: `~/.headsup/credentials.env` (chmod 600 — never paste in chat)
 
 ---

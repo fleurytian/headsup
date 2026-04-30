@@ -8,6 +8,7 @@ struct SettingsView: View {
     @EnvironmentObject var loc: Localizer
 
     @State private var copied = false
+    @State private var deviceTokenCopied = false
     @State private var muteUntil: Date?
     @State private var muteLoading = false
     @State private var permissionStatus: UNAuthorizationStatus = .notDetermined
@@ -95,45 +96,63 @@ struct SettingsView: View {
                     SettingsSection(title: "account") {
                         VStack(alignment: .leading, spacing: 0) {
                             if let session = auth.session {
-                                SettingsKeyValue(key: "user key", value: session.userKey, mono: true)
-                                Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                                // The whole user-key row is the copy button —
+                                // tap anywhere on it to copy. Codex review:
+                                // "the separate Copy button felt redundant
+                                // when the value itself was right there."
                                 Button {
                                     UIPasteboard.general.string = session.userKey
                                     copied = true
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                                 } label: {
-                                    HStack {
-                                        Text(copied ? T("已复制", "Copied") : T("复制 User Key", "Copy User Key"))
-                                            .font(HU.body()).foregroundStyle(HU.C.accent)
-                                        Spacer()
-                                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                                            .font(.caption.weight(.medium))
-                                            .foregroundStyle(HU.C.accent)
-                                    }
-                                    .padding(.horizontal, 16).padding(.vertical, 14)
+                                    SettingsKeyValue(
+                                        key: copied ? T("已复制 user key", "user key copied") : "user key",
+                                        value: session.userKey,
+                                        mono: true,
+                                        valueColor: copied ? HU.C.accent : HU.C.muted
+                                    )
                                 }
+                                .buttonStyle(.plain)
+                                Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
                             }
-                        }
-                        .card()
-                    }
-
-                    SettingsSection(title: "notifications") {
-                        VStack(alignment: .leading, spacing: 0) {
+                            // Permissions + device-token consolidated into
+                            // the account section: they're all "what
+                            // identity / channel does HeadsUp have for me"
+                            // pieces, not separate concerns.
                             SettingsKeyValue(
-                                key: "permission",
+                                key: T("通知权限", "notifications"),
                                 value: permissionLabel,
                                 valueColor: permissionStatus == .authorized ? HU.C.ink : HU.C.muted
                             )
                             if let token = push.deviceTokenString {
                                 Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
-                                SettingsKeyValue(key: "device token", value: String(token.prefix(12)) + "…", mono: true)
+                                Button {
+                                    UIPasteboard.general.string = token
+                                    deviceTokenCopied = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { deviceTokenCopied = false }
+                                } label: {
+                                    SettingsKeyValue(
+                                        key: deviceTokenCopied
+                                            ? T("已复制 device token", "device token copied")
+                                            : T("设备 token (APNs)", "device token (APNs)"),
+                                        value: String(token.prefix(12)) + "…",
+                                        mono: true,
+                                        valueColor: deviceTokenCopied ? HU.C.accent : HU.C.muted
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .card()
                     }
-
-                    SettingsSection(title: "diagnostics") {
+                    // Diagnose + the Demo Push button live together as the
+                    // "is everything wired up" check pair: Diagnose tells
+                    // you what state you're in; Demo Push is the live
+                    // round-trip test of that state.
+                    SettingsSection(title: "试用 / diagnostics") {
                         VStack(alignment: .leading, spacing: 0) {
+                            DemoPushButton()
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
                             NavigationLink(destination: DiagnoseView()) {
                                 settingsRow(zh: "诊断", en: "Diagnose", icon: "stethoscope")
                             }
@@ -143,11 +162,6 @@ struct SettingsView: View {
                     // Badges + Stats moved to ProfileView (bottom dock → 我的)
                     // — they're identity / engagement surfaces, not system
                     // configuration, so they don't belong in Settings.
-
-                    SettingsSection(title: "demo") {
-                        DemoPushButton()
-                            .card()
-                    }
 
                     SettingsSection(title: "about") {
                         VStack(alignment: .leading, spacing: 0) {
@@ -159,6 +173,34 @@ struct SettingsView: View {
                                         .font(HU.body()).foregroundStyle(HU.C.ink)
                                     Spacer()
                                     Text("headsup.md").font(HU.small()).foregroundStyle(HU.C.muted)
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(HU.C.muted)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            Link(destination: URL(string: "https://github.com/fleurytian/headsup")!) {
+                                HStack {
+                                    LText("源码 (GitHub)", "Source on GitHub")
+                                        .font(HU.body()).foregroundStyle(HU.C.ink)
+                                    Spacer()
+                                    Text("github.com/fleurytian/headsup")
+                                        .font(HU.small()).foregroundStyle(HU.C.muted)
+                                        .lineLimit(1).truncationMode(.middle)
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(HU.C.muted)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            Link(destination: URL(string: "https://github.com/sponsors/fleurytian")!) {
+                                HStack {
+                                    LText("赞助 / 捐赠", "Donate")
+                                        .font(HU.body()).foregroundStyle(HU.C.ink)
+                                    Spacer()
+                                    Text("☕️").font(HU.small())
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption.weight(.medium))
                                         .foregroundStyle(HU.C.muted)

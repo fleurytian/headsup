@@ -4,6 +4,8 @@
 
 iOS push notification platform for AI agents. Agents send notifications with tappable buttons, users reply from the lock screen, agents receive the result via webhook, SSE, or polling.
 
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+
 ## Layout
 
 ```
@@ -30,15 +32,22 @@ xcodegen          # generates HeadsUp.xcodeproj from project.yml
 open HeadsUp.xcodeproj
 ```
 
-## Production
+You'll need an Apple Developer account, an APNs `*.p8` key, and your own bundle id to ship pushes from your fork. The default reference deployment lives at <https://headsup.md>.
 
-Live at <https://headsup.md>. Backend on Aliyun HK SWAS at `47.83.199.33`. SSL via Let's Encrypt.
+## Status
 
-Deploy via Aliyun Cloud Assistant Run Command pulling from a private gist (see `~/Desktop/...` runbooks).
+The hosted instance at <https://headsup.md> is the canonical one, run by [@fleurytian](https://github.com/fleurytian). The iOS app submits to the App Store from there.
 
-## Identity / secrets
+If you fork this and self-host, point your iOS build at your own backend (edit `ApiBaseURL` in `ios/HeadsUp/Info.plist`) and register a separate Apple bundle id.
 
-Apple Developer Team `N74WZGGX8W`, Bundle ID `md.headsup.app`. APNs key + server password live in `~/.headsup/credentials.env` outside this repo. The `*.p8` and any `secrets/` directory are gitignored.
+## Secrets
 
----
-*This is a private repo. Don't share unless you're me.*
+Nothing sensitive lives in this repo. APNs `.p8` keys, server passwords, ADMIN_TOKEN, and any `.env` are gitignored. They live in `~/.headsup/credentials.env` on the operator's machine and are propagated to production only through env vars / SSH-tunneled file copy.
+
+## Donations
+
+If HeadsUp saves you keystrokes, you can buy us a coffee on [GitHub Sponsors](https://github.com/sponsors/fleurytian).
+
+## License
+
+AGPL-3.0 — derivative works that run as a public service must publish their source.
