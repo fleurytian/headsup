@@ -45,4 +45,4 @@ test_headsup.db
 # Cache / temp
 /tmp/
 nohup.out
-screenshots/
+/ios/screenshots/

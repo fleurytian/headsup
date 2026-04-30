@@ -212,6 +212,36 @@ _LANDING_HTML = """<!doctype html>
     background: var(--line); transition: background 0.3s;
   }
   .phone-mock .dots .dot.active { background: var(--ink); }
+
+  /* Real iOS app screenshots — shown below the hero. */
+  .app-preview {
+    margin: 64px 0 32px;
+    text-align: center;
+  }
+  .app-preview h2 {
+    font-size: 14px; font-weight: 600; letter-spacing: 1.2px;
+    color: var(--muted); text-transform: uppercase;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    margin: 0 0 28px;
+  }
+  .app-preview .shots {
+    display: flex; gap: 24px; justify-content: center;
+    flex-wrap: wrap; align-items: flex-start;
+  }
+  .app-preview .shot {
+    flex: 0 0 auto; max-width: 260px; width: 100%;
+  }
+  .app-preview .shot img {
+    width: 100%; height: auto; display: block;
+    border-radius: 28px;
+    box-shadow: 0 16px 48px rgba(26,24,24,0.16);
+    border: 1px solid var(--line);
+  }
+  .app-preview .shot .caption {
+    margin-top: 12px; font-size: 12px; color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: 0.6px;
+  }
   .eyebrow {
     font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
     color: var(--muted); text-transform: lowercase;
@@ -470,6 +500,18 @@ _LANDING_HTML = """<!doctype html>
       </div>
     </div>
   </div>
+
+  <section class="app-preview">
+    <h2 data-lang="en">inside the app</h2>
+    <h2 data-lang="zh">app 内一览</h2>
+    <div class="shots">
+      <figure class="shot">
+        <img src="/static/screenshots/authorize.png" alt="Authorize an agent" loading="lazy">
+        <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
+        <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
+      </figure>
+    </div>
+  </section>
 
   <footer>
     <span data-lang="en">A quiet protocol for interactive notifications.</span>
