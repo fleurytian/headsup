@@ -100,7 +100,77 @@ _LANDING_HTML = """<!doctype html>
     min-height: 100vh;
     line-height: 1.5;
   }
+  /* Mobile-first; widens out on desktop into a two-column hero. */
   .wrap { max-width: 640px; margin: 0 auto; padding: 56px 32px 80px; }
+  .hero { display: block; }
+  .hero .col-left { order: 1; }
+  .hero .col-right { order: 2; }
+  @media (min-width: 900px) {
+    .wrap { max-width: 1080px; padding: 80px 56px 120px; }
+    .hero {
+      display: grid; grid-template-columns: 1.05fr 0.95fr;
+      gap: 56px; align-items: start;
+    }
+    .hero .col-left  { order: 1; }
+    .hero .col-right { order: 2; padding-top: 6px; }
+    h1 { font-size: 42px !important; line-height: 1.15 !important; letter-spacing: -0.5px; }
+    .lede { font-size: 19px !important; }
+  }
+  /* App download row */
+  .app-cta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 0 0 32px; }
+  .app-cta .badge {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--ink); color: var(--bg); border-radius: 12px;
+    padding: 10px 16px; text-decoration: none; font-weight: 600;
+    transition: opacity 0.15s;
+  }
+  .app-cta .badge:hover { opacity: 0.85; }
+  .app-cta .badge .glyph { font-size: 22px; line-height: 1; }
+  .app-cta .badge .lines { display: flex; flex-direction: column; line-height: 1.1; }
+  .app-cta .badge .small { font-size: 10px; opacity: 0.85; font-weight: 500; }
+  .app-cta .badge .big { font-size: 16px; }
+  .app-cta .req { color: var(--muted); font-size: 13px; }
+  /* Phone mockup that slides in on the right of the hero on desktop */
+  .phone-mock {
+    background: var(--card); border: 1px solid var(--line); border-radius: 28px;
+    padding: 18px; max-width: 380px; margin: 0 auto;
+  }
+  .phone-mock .frame {
+    border-radius: 28px; background: var(--ink); padding: 10px;
+    box-shadow: 0 14px 40px rgba(26,24,24,0.18);
+  }
+  .phone-mock .screen {
+    background: var(--bg); border-radius: 20px; padding: 18px 18px 22px;
+    aspect-ratio: 9/19;
+  }
+  .phone-mock .lock-time {
+    color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; letter-spacing: 1px; text-align: center; margin-bottom: 14px;
+  }
+  .phone-mock .notif {
+    background: rgba(255,255,255,0.92); border: 1px solid var(--line);
+    border-radius: 14px; padding: 10px 12px; backdrop-filter: blur(10px);
+    margin-bottom: 8px;
+  }
+  .phone-mock .notif .top {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    font-size: 10px; color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .phone-mock .notif .top .dot-purple {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  }
+  .phone-mock .notif .title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .phone-mock .notif .body { font-size: 12px; color: #4a4644; line-height: 1.4; }
+  .phone-mock .notif .btns { display: flex; gap: 6px; margin-top: 10px; }
+  .phone-mock .notif .btn-pill {
+    flex: 1; text-align: center; padding: 6px 10px; border-radius: 999px;
+    border: 1px solid var(--ink); font-size: 11px; font-weight: 600;
+  }
+  .phone-mock .notif .btn-pill.alt {
+    border-color: var(--line); color: var(--muted); font-weight: 500;
+  }
   .eyebrow {
     font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
     color: var(--muted); text-transform: lowercase;
@@ -186,13 +256,60 @@ _LANDING_HTML = """<!doctype html>
 
   <div class="dot" aria-hidden="true"></div>
 
-  <div data-lang="en">
-    <h1>Let your agents<br>give you a heads up<br>by reading <span style="color:var(--accent)">skill.md</span>.</h1>
-    <p class="lede">Yes / No / Wait — without opening a thing.</p>
-  </div>
-  <div data-lang="zh">
-    <h1>让你的 AI<br>通过读 <span style="color:var(--accent)">skill.md</span><br>来给你提个醒。</h1>
-    <p class="lede">Yes / No / Wait — 不用打开任何 App。</p>
+  <div class="hero">
+    <div class="col-left">
+      <div data-lang="en">
+        <h1>Let your agents<br>give you a heads up<br>by reading <span style="color:var(--accent)">skill.md</span>.</h1>
+        <p class="lede">Yes / No / Wait — without opening a thing.</p>
+      </div>
+      <div data-lang="zh">
+        <h1>让你的 AI<br>通过读 <span style="color:var(--accent)">skill.md</span><br>来给你提个醒。</h1>
+        <p class="lede">Yes / No / Wait — 不用打开任何 App。</p>
+      </div>
+
+      <div class="app-cta">
+        <a class="badge" href="https://apps.apple.com/app/headsup">
+          <span class="glyph"></span>
+          <span class="lines">
+            <span class="small" data-lang="en">Download on the</span>
+            <span class="small" data-lang="zh">从</span>
+            <span class="big">App Store</span>
+          </span>
+        </a>
+        <span class="req" data-lang="en">iPhone, iOS 16 or later</span>
+        <span class="req" data-lang="zh">iPhone · iOS 16+</span>
+      </div>
+    </div>
+
+    <div class="col-right">
+      <div class="phone-mock" aria-hidden="true">
+        <div class="frame">
+          <div class="screen">
+            <div class="lock-time">9:41</div>
+            <div class="notif">
+              <div class="top"><span class="dot-purple"></span> CLAUDE CODE · NOW</div>
+              <div class="title" data-lang="en">Deploy to prod?</div>
+              <div class="title" data-lang="zh">上线到生产?</div>
+              <div class="body" data-lang="en">build #4287 · 12 commits ahead. Looks clean. (long-press to reply)</div>
+              <div class="body" data-lang="zh">build #4287 · 比线上多 12 个 commit,看着没问题。(长按回复)</div>
+              <div class="btns">
+                <div class="btn-pill" data-lang="en">Ship it</div>
+                <div class="btn-pill" data-lang="zh">上线</div>
+                <div class="btn-pill alt" data-lang="en">Wait</div>
+                <div class="btn-pill alt" data-lang="zh">等等</div>
+              </div>
+            </div>
+            <div class="notif">
+              <div class="top"><span class="dot-purple" style="background:#D97757"></span> HERMES · 5 min ago</div>
+              <div class="title" data-lang="en">Reservation confirmed.</div>
+              <div class="title" data-lang="zh">预定确认。</div>
+              <div class="body" data-lang="en">Sushi Yasuda, 7:30pm, 4 pax.</div>
+              <div class="body" data-lang="zh">Sushi Yasuda 周五 7:30, 4 位。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="rule"><span data-lang="en">how it works</span><span data-lang="zh">怎么用</span></div>

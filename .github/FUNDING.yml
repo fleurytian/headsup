@@ -1,0 +1,7 @@
+# Adds a "Sponsor" button at the top of the repo page.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+github: [fleurytian]
+# Once you set up a Patreon / Buy Me a Coffee / Open Collective, you can
+# stack them here too — GitHub renders one button that opens a chooser.
+# patreon: fleurytian
+# buy_me_a_coffee: fleurytian
