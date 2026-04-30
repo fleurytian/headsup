@@ -207,6 +207,12 @@ struct SettingsView: View {
                                 }
                                 .padding(.horizontal, 16).padding(.vertical, 14)
                             }
+                            // Trust-based supporter claim. Awards the
+                            // Supporter badge with no actual GitHub
+                            // Sponsors webhook integration. The honor
+                            // system works because the badge has zero
+                            // mechanical value — it's just a thanks.
+                            DonationClaimRow()
                             Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
                             Link(destination: URL(string: "https://headsup.md/privacy")!) {
                                 HStack {
@@ -481,6 +487,64 @@ private struct DemoPushButton: View {
                 "发送失败: \(error.localizedDescription)",
                 "Failed: \(error.localizedDescription)"
             )
+        }
+    }
+}
+
+/// "I donated" trust button. Hits POST /v1/app/me/claim-supporter,
+/// which awards the Supporter badge to the user. There's no
+/// GitHub-Sponsors-side verification today; we lean on the badge
+/// being purely cosmetic so the honor system is good enough.
+private struct DonationClaimRow: View {
+    @State private var claiming = false
+    @State private var claimed = false
+
+    var body: some View {
+        Button {
+            Task { await claim() }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: claimed ? "checkmark.seal.fill" : "heart.fill")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(claimed ? HU.C.accent : HU.C.muted)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    LText(claimed ? "谢谢你的支持 💝" : "我捐了,给我个徽章",
+                          claimed ? "Thanks for the support 💝" : "I donated — give me the badge")
+                        .font(HU.body(.medium)).foregroundStyle(HU.C.ink)
+                    if !claimed {
+                        LText("解锁 Supporter 徽章。基于信任。",
+                              "Unlocks the Supporter badge. Honor system.")
+                            .font(HU.small()).foregroundStyle(HU.C.muted)
+                    }
+                }
+                Spacer()
+                if claiming {
+                    ProgressView().scaleEffect(0.7).tint(HU.C.muted)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+        }
+        .buttonStyle(.plain)
+        .disabled(claiming || claimed)
+    }
+
+    private func claim() async {
+        guard let session = AuthService.shared.session else { return }
+        claiming = true
+        defer { claiming = false }
+        struct Empty: Encodable {}
+        struct EmptyResp: Decodable {}
+        do {
+            // 204 returns no body; APIClient handles empty content fine.
+            let _: EmptyResp? = try? await APIClient.shared.post(
+                "/v1/app/me/claim-supporter",
+                body: Empty(),
+                sessionToken: session.sessionToken
+            )
+            claimed = true
+            // Force the home/profile dashboards to re-fetch their badge counts.
+            NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
         }
     }
 }

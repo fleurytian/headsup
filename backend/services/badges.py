@@ -151,6 +151,10 @@ BUILTIN_BADGES: list[BadgeDef] = [
        secret=True,
        criterion_zh="撤销 agent 之后又重新授权同一个 agent。",
        criterion_en="Re-authorize an agent you had previously revoked."),
+    _b("supporter",        "user",  "心意", "Supporter",
+       "你让 HeadsUp 多撑一阵子。", "You kept HeadsUp running a little longer.", "💝",
+       criterion_zh="通过 GitHub Sponsors 捐赠后,在 设置 → 捐赠 旁边点 \"我捐了\"。",
+       criterion_en="After donating via GitHub Sponsors, tap 'I donated' next to the Donate row in Settings."),
 
     # ── LONG · Agent (10) ────────────────────────────────────────────────────
     _b("centurion",        "agent", "百夫长", "Centurion",
@@ -651,6 +655,7 @@ def on_user_action(session: Session, *, user_id: str, action: str) -> list[str]:
         "welcome_back":   "welcome-back",
         "spring_clean_50":"spring-cleaner",
         "comeback_kid":   "comeback-kid",
+        "donated":        "supporter",
     }
     badge_id = badge_for_action.get(action)
     if badge_id and _award(session, badge_id, user_id=user_id):

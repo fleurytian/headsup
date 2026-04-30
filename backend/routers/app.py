@@ -967,6 +967,34 @@ def cold_feet(
     )
 
 
+@router.post("/me/claim-supporter", status_code=204)
+def claim_supporter(
+    background_tasks: BackgroundTasks,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Trust-based 'I donated' claim for the Supporter badge.
+
+    No verification — GitHub Sponsors doesn't (cheaply) tell us who
+    a given AppUser is. The badge ego-rewards real donors and trusts
+    everyone else won't go through the trouble for a 💝 they could
+    just look at in the catalog.
+
+    Idempotent: re-claiming on an already-supporter user does nothing
+    via _award's existing-record check.
+    """
+    try:
+        awarded = badges_svc.on_user_action(session, user_id=user.id, action="donated")
+        if awarded:
+            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
+    except Exception:
+        pass
+    events.safe_log(
+        session, kind="supporter_claimed",
+        actor_kind="user", actor_id=user.id,
+    )
+
+
 @router.post("/me/ping", status_code=204)
 def app_opened_ping(
     user: AppUser = Depends(get_authed_user),
