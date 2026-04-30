@@ -228,6 +228,7 @@ struct HistoryRow: View {
     @State private var actions: [(id: String, title: String)] = []
     @State private var sending: String? = nil      // button_id currently being sent
     @State private var localReply: String? = nil   // optimistic reply label
+    @State private var copiedFeedback: Bool = false
 
     private var displayedReply: String? { localReply ?? item.button_label }
 
@@ -283,10 +284,23 @@ struct HistoryRow: View {
                     Text("→ \(label)")
                         .font(HU.small(.semibold))
                         .foregroundStyle(HU.C.accent)
-                } else if isInfoOnly {
-                    // info_only doesn't expect a reply — don't say "未响应"
-                    EmptyView()
                 }
+                // Visible copy chip on EVERY row, regardless of reply state.
+                // Long-press contextMenu still works for "with title" variant.
+                Button {
+                    UIPasteboard.general.string = plainBodyForCopy
+                    copiedFeedback = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        copiedFeedback = false
+                    }
+                } label: {
+                    Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(copiedFeedback ? HU.C.accent : HU.C.muted)
+                        .padding(6)
+                        .background(Circle().fill(HU.C.line.opacity(0.5)))
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 2)
             // Inline reply buttons — only when no reply yet AND the category has buttons.

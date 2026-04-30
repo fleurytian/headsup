@@ -33,6 +33,7 @@ class Agent(SQLModel, table=True):
     description: Optional[str] = None     # shown to users on authorize page
     logo_url: Optional[str] = None        # optional avatar URL
     agent_type: Optional[str] = None      # slug: assistant | coding | automation | monitor | companion | research | other
+    accent_color: Optional[str] = None    # hex like "#D97757" — used for avatar bg + tint everywhere
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     bindings: list["AgentUserBinding"] = Relationship(back_populates="agent")
