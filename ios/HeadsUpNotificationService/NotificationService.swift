@@ -66,11 +66,13 @@ final class NotificationService: UNNotificationServiceExtension {
             guard let self, !self.didFinish else { return }
             self.didFinish = true
 
-            // Right-side thumbnail: the per-message image_url if the agent set
-            // one, otherwise the avatar (so a notification ALWAYS has visible
-            // identity even without the comm-notification entitlement).
-            let attachmentSource = imageFile ?? avatarFile
-            if let src = attachmentSource,
+            // Right-side thumbnail: ONLY the per-message image_url. The
+            // earlier fallback to the agent's avatar made long-pressed
+            // notifications render the avatar as a huge hero image — bad UX
+            // for agents that didn't intentionally attach one. Identity is
+            // already covered by the small round sender avatar on the LEFT
+            // (via INSendMessageIntent + comm-notification entitlement).
+            if let src = imageFile,
                let att = try? UNNotificationAttachment(identifier: "image", url: src, options: nil) {
                 bestAttempt.attachments = [att]
             }
