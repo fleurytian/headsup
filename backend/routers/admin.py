@@ -301,6 +301,59 @@ def _top_agent_distribution(session: Session) -> list[dict]:
     ]
 
 
+# Mapping product_id → gross USD price. Mirrors HeadsUp.storekit + the
+# tiers picked in App Store Connect. Update both when prices change.
+TIP_USD = {
+    "md.headsup.app.tip.small":  0.99,
+    "md.headsup.app.tip.medium": 3.99,
+    "md.headsup.app.tip.large": 19.99,
+}
+TIP_LABEL = {
+    "md.headsup.app.tip.small":  "Small (¥6 / $0.99)",
+    "md.headsup.app.tip.medium": "Medium (¥28 / $3.99)",
+    "md.headsup.app.tip.large":  "Large (¥128 / $19.99)",
+}
+
+
+def _revenue_window(session: Session, since: datetime) -> dict:
+    """Sum Tip Jar IAP gross revenue over the window.
+
+    Pulls Event rows with kind='iap_purchased', reads each meta.product_id,
+    multiplies by the static USD price table. Apple's 15-30% cut is NOT
+    deducted — we report gross because the cut varies (15% under Apple's
+    Small Business Program, 30% otherwise). Net is up to the user to
+    annotate later if useful.
+    """
+    rows = session.exec(
+        select(Event.meta).where(
+            Event.kind == "iap_purchased",
+            Event.created_at >= since,
+        )
+    ).all()
+    by_product: dict[str, dict] = {pid: {"count": 0, "usd": 0.0} for pid in TIP_USD}
+    for r in rows:
+        meta_raw = r if not isinstance(r, tuple) else r[0]
+        if not meta_raw:
+            continue
+        try:
+            import json as _json
+            meta = _json.loads(meta_raw) if isinstance(meta_raw, str) else meta_raw
+        except Exception:
+            continue
+        pid = (meta or {}).get("product_id")
+        if pid not in TIP_USD:
+            continue
+        by_product[pid]["count"] += 1
+        by_product[pid]["usd"] += TIP_USD[pid]
+    total_count = sum(b["count"] for b in by_product.values())
+    total_usd   = sum(b["usd"]   for b in by_product.values())
+    return {
+        "count": total_count,
+        "usd": total_usd,
+        "by_product": by_product,
+    }
+
+
 def _rejections_window(session: Session, since: datetime) -> dict:
     """How often /v1/push got rejected, broken out by reason."""
     quota = _count(
@@ -364,6 +417,11 @@ def admin_dashboard(token: str = Query(default="")):
         reject_30d = _rejections_window(session, last_30d)
 
         agent_buckets = _top_agent_distribution(session)
+
+        revenue_24h = _revenue_window(session, last_24h)
+        revenue_7d  = _revenue_window(session, last_7d)
+        revenue_30d = _revenue_window(session, last_30d)
+        revenue_all = _revenue_window(session, datetime(1970, 1, 1))
 
         pushes_24h = sla_24h["pushes"]
         pushes_7d  = sla_7d["pushes"]
@@ -513,6 +571,44 @@ def admin_dashboard(token: str = Query(default="")):
         )
     else:
         agent_dist_html = "<p class='aux'>暂无 agent 绑定数据。</p>"
+
+    # ── Revenue · Tip Jar (IAP) ─────────────────────────────────────────────
+    def _money(usd: float) -> str:
+        return f"${usd:,.2f}"
+
+    revenue_summary_html = (
+        "<table><thead><tr>"
+        "<th>窗口</th><th class='num'>笔数</th><th class='num'>毛收入 (USD)</th>"
+        "<th class='aux'>说明</th>"
+        "</tr></thead><tbody>"
+        f"<tr><td>累计</td><td class='num'>{revenue_all['count']}</td>"
+        f"<td class='num'>{_money(revenue_all['usd'])}</td>"
+        f"<td class='aux'>Apple 抽成 15-30% 后是净收入(数字未扣)</td></tr>"
+        f"<tr><td>30 天</td><td class='num'>{revenue_30d['count']}</td>"
+        f"<td class='num'>{_money(revenue_30d['usd'])}</td><td class='aux'></td></tr>"
+        f"<tr><td>7 天</td><td class='num'>{revenue_7d['count']}</td>"
+        f"<td class='num'>{_money(revenue_7d['usd'])}</td><td class='aux'></td></tr>"
+        f"<tr><td>24 小时</td><td class='num'>{revenue_24h['count']}</td>"
+        f"<td class='num'>{_money(revenue_24h['usd'])}</td><td class='aux'></td></tr>"
+        "</tbody></table>"
+    )
+    # Per-product breakdown for the all-time window
+    bp = revenue_all["by_product"]
+    revenue_breakdown_html = (
+        "<table><thead><tr>"
+        "<th>档位</th><th class='num'>累计笔数</th><th class='num'>累计毛收 (USD)</th>"
+        "</tr></thead><tbody>"
+        + "".join(
+            f"<tr><td>{TIP_LABEL[pid]}</td>"
+            f"<td class='num'>{bp[pid]['count']}</td>"
+            f"<td class='num'>{_money(bp[pid]['usd'])}</td></tr>"
+            for pid in ["md.headsup.app.tip.small",
+                        "md.headsup.app.tip.medium",
+                        "md.headsup.app.tip.large"]
+        )
+        + "</tbody></table>"
+    )
+    revenue_html = revenue_summary_html + revenue_breakdown_html
 
     # ── Auth funnel table ────────────────────────────────────────────────────
     def _funnel_row(label: str, key: str, fmt=str, note: str = "") -> str:
@@ -681,6 +777,9 @@ def admin_dashboard(token: str = Query(default="")):
 
   <div class='section'>主流 Agent 分布</div>
   {agent_dist_html}
+
+  <div class='section'>Tip Jar · 收入</div>
+  {revenue_html}
 
   <div class='section'>授权漏斗</div>
   {funnel_html}

@@ -12,8 +12,8 @@ import StoreKit
 ///   1. App Store Connect → Apps → HeadsUp → In-App Purchases → "+"
 ///   2. Type: Consumable
 ///   3. Add three products with these exact identifiers:
-///        md.headsup.app.tip.small    (Tier 1 — ¥6 / $0.99)
-///        md.headsup.app.tip.medium   (Tier 4 — ¥30 / $4.99)
+///        md.headsup.app.tip.small    (Tier 1 — ¥6  / $0.99)
+///        md.headsup.app.tip.medium   (Tier 3 — ¥28 / $3.99)
 ///        md.headsup.app.tip.large    (Tier 8 — ¥128 / $19.99)
 ///   4. Each product needs a localized display name + description
 ///   5. Sign the Paid Apps agreement under Agreements, Tax, and Banking
