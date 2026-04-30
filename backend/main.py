@@ -409,135 +409,49 @@ _LANDING_HTML = """<!doctype html>
     <div class="col-right">
       <div class="hero-carousel">
 
-        <!-- Slot 1 — animated lock-screen mockup (the elevator pitch) -->
-        <div class="slot mockup active">
-        <div class="phone-mock" aria-hidden="true">
-        <div class="frame">
-          <div class="screen">
-            <div class="lock-time">9:41</div>
-
-            <!-- Scenario 1 — Claude Code: deploy gate -->
-            <div class="scenario active">
-              <div class="notif">
-                <div class="top"><span class="dot-purple"></span> CLAUDE CODE · NOW</div>
-                <div class="title" data-lang="en">Deploy to prod?</div>
-                <div class="title" data-lang="zh">上线到生产?</div>
-                <div class="body" data-lang="en">build #4287 · 12 commits ahead. Looks clean.</div>
-                <div class="body" data-lang="zh">build #4287 · 比线上多 12 个 commit,看着没问题。</div>
-                <div class="btns">
-                  <div class="btn-pill yes" data-lang="en">Ship</div>
-                  <div class="btn-pill yes" data-lang="zh">上线</div>
-                  <div class="btn-pill no" data-lang="en">Hold</div>
-                  <div class="btn-pill no" data-lang="zh">等等</div>
-                </div>
-              </div>
-              <div class="notif">
-                <div class="top"><span class="dot-purple" style="background:#D97757"></span> HERMES · 5 min ago</div>
-                <div class="title" data-lang="en">Reservation confirmed.</div>
-                <div class="title" data-lang="zh">预定确认。</div>
-                <div class="body" data-lang="en">Sushi Yasuda, Fri 7:30pm, 4 pax.</div>
-                <div class="body" data-lang="zh">Sushi Yasuda 周五 7:30, 4 位。</div>
-              </div>
-            </div>
-
-            <!-- Scenario 2 — Codex: long-running task done -->
-            <div class="scenario">
-              <div class="notif">
-                <div class="top"><span class="dot-purple" style="background:#10A37F"></span> CODEX · NOW</div>
-                <div class="title" data-lang="en">Migration ready for review.</div>
-                <div class="title" data-lang="zh">迁移脚本已就绪,等你确认。</div>
-                <div class="body" data-lang="en">42 tables, 3 destructive ops flagged. Diff in PR #218.</div>
-                <div class="body" data-lang="zh">42 张表,3 处破坏性操作已标注。Diff 在 PR #218。</div>
-                <div class="btns">
-                  <div class="btn-pill yes" data-lang="en">Approve</div>
-                  <div class="btn-pill yes" data-lang="zh">通过</div>
-                  <div class="btn-pill no" data-lang="en">Reject</div>
-                  <div class="btn-pill no" data-lang="zh">驳回</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Scenario 3 — OpenClaw: alert with snooze -->
-            <div class="scenario">
-              <div class="notif">
-                <div class="top"><span class="dot-purple" style="background:#E8A33D"></span> OPENCLAW · 2 min ago</div>
-                <div class="title" data-lang="en">.md domain available.</div>
-                <div class="title" data-lang="zh">捕到一个 .md 域名。</div>
-                <div class="body" data-lang="en">letterbox.md just dropped. Snipe before 09:42 PT.</div>
-                <div class="body" data-lang="zh">letterbox.md 刚释放,09:42 PT 前下手。</div>
-                <div class="btns">
-                  <div class="btn-pill yes" data-lang="en">Buy</div>
-                  <div class="btn-pill yes" data-lang="zh">下单</div>
-                  <div class="btn-pill no" data-lang="en">Skip</div>
-                  <div class="btn-pill no" data-lang="zh">跳过</div>
-                </div>
-              </div>
-              <div class="notif">
-                <div class="top"><span class="dot-purple"></span> CLAUDE CODE · 1 hr ago</div>
-                <div class="title" data-lang="en">Tests passing on main.</div>
-                <div class="title" data-lang="zh">main 分支测试已通过。</div>
-                <div class="body" data-lang="en">28 / 28 green. No flakes.</div>
-                <div class="body" data-lang="zh">28 / 28 全绿,无抖动。</div>
-              </div>
-            </div>
-
-            <!-- Scenario 4 — Personal agent / yes-no -->
-            <div class="scenario">
-              <div class="notif">
-                <div class="top"><span class="dot-purple" style="background:#7C5CFC"></span> KIMI · NOW</div>
-                <div class="title" data-lang="en">Coffee with Yu at 3pm?</div>
-                <div class="title" data-lang="zh">3 点和 Yu 喝咖啡?</div>
-                <div class="body" data-lang="en">Calendar's clear. He's flexible on the spot.</div>
-                <div class="body" data-lang="zh">日历是空的,他地点也随便。</div>
-                <div class="btns">
-                  <div class="btn-pill yes" data-lang="en">Yes</div>
-                  <div class="btn-pill yes" data-lang="zh">好</div>
-                  <div class="btn-pill no" data-lang="en">No</div>
-                  <div class="btn-pill no" data-lang="zh">不行</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="dots">
-              <div class="dot active"></div>
-              <div class="dot"></div>
-              <div class="dot"></div>
-              <div class="dot"></div>
-            </div>
-          </div>
-        </div>
-        </div>
-        </div> <!-- /.slot.mockup -->
-
-        <!-- Slot 2 — onboarding -->
-        <figure class="slot shot">
+        <!-- Slot 1 — onboarding -->
+        <figure class="slot shot active">
           <img src="/static/screenshots/01-onboarding.png" alt="Sign in" loading="lazy">
           <figcaption class="caption" data-lang="en">sign in</figcaption>
           <figcaption class="caption" data-lang="zh">登录</figcaption>
         </figure>
 
-        <!-- Slot 3 — home / agent list -->
+        <!-- Slot 2 — home / agent list -->
         <figure class="slot shot">
           <img src="/static/screenshots/02-home.png" alt="Your agents" loading="lazy">
           <figcaption class="caption" data-lang="en">your agents</figcaption>
           <figcaption class="caption" data-lang="zh">你的 agents</figcaption>
         </figure>
 
-        <!-- Slot 4 — authorize consent -->
+        <!-- Slot 3 — push arrives on lock screen -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/06-push-collapsed.png" alt="Push arrives on the lock screen" loading="lazy">
+          <figcaption class="caption" data-lang="en">it lands on your lock screen</figcaption>
+          <figcaption class="caption" data-lang="zh">直接落到你的锁屏</figcaption>
+        </figure>
+
+        <!-- Slot 4 — push expanded with image + 4 actions -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/07-push-expanded.png" alt="Long-press to see image and reply options" loading="lazy">
+          <figcaption class="caption" data-lang="en">long-press to reply with one tap</figcaption>
+          <figcaption class="caption" data-lang="zh">长按一键回复</figcaption>
+        </figure>
+
+        <!-- Slot 5 — authorize consent -->
         <figure class="slot shot">
           <img src="/static/screenshots/03-authorize.png" alt="Authorize an agent" loading="lazy">
           <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
           <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
         </figure>
 
-        <!-- Slot 5 — agent detail / history -->
+        <!-- Slot 6 — agent detail / history -->
         <figure class="slot shot">
           <img src="/static/screenshots/04-detail.png" alt="Agent detail and history" loading="lazy">
           <figcaption class="caption" data-lang="en">agent detail · history</figcaption>
           <figcaption class="caption" data-lang="zh">agent 详情 · 历史</figcaption>
         </figure>
 
-        <!-- Slot 6 — settings -->
+        <!-- Slot 7 — settings -->
         <figure class="slot shot">
           <img src="/static/screenshots/05-settings.png" alt="Settings" loading="lazy">
           <figcaption class="caption" data-lang="en">settings</figcaption>
@@ -551,6 +465,7 @@ _LANDING_HTML = """<!doctype html>
           <div class="dot" data-i="3"></div>
           <div class="dot" data-i="4"></div>
           <div class="dot" data-i="5"></div>
+          <div class="dot" data-i="6"></div>
         </div>
       </div>
     </div>
@@ -597,24 +512,7 @@ _LANDING_HTML = """<!doctype html>
   // (toggle button, hidden classes, copy button label).
   setLang(document.documentElement.dataset.langPref || 'en');
 
-  // ── Inner mockup scenarios — only rotate while the mockup slot is active ──
-  const scenarios = document.querySelectorAll('.phone-mock .scenario');
-  const innerDots = document.querySelectorAll('.phone-mock .dots .dot');
-  let scenarioIdx = 0;
-  function advanceScenario() {
-    if (scenarios.length <= 1) return;
-    scenarios[scenarioIdx].classList.remove('active');
-    innerDots[scenarioIdx] && innerDots[scenarioIdx].classList.remove('active');
-    scenarioIdx = (scenarioIdx + 1) % scenarios.length;
-    scenarios[scenarioIdx].classList.add('active');
-    innerDots[scenarioIdx] && innerDots[scenarioIdx].classList.add('active');
-  }
-  setInterval(() => {
-    const mockSlot = document.querySelector('.hero-carousel .slot.mockup');
-    if (mockSlot && mockSlot.classList.contains('active')) advanceScenario();
-  }, 4000);
-
-  // ── Outer hero carousel — 6 slots: 5 screenshots + lock-screen mockup ─────
+  // ── Hero carousel — rotate through 7 real iOS captures ──────────────────
   const slots = document.querySelectorAll('.hero-carousel .slot');
   const outerDots = document.querySelectorAll('.hero-carousel .outer-dots .dot');
   if (slots.length > 1) {
