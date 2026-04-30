@@ -70,19 +70,29 @@ _LANDING_HTML = """<!doctype html>
 <meta property="og:description" content="Let your agents give you a heads up by reading skill.md.">
 <meta property="og:url" content="https://headsup.md">
 <script>
-// Initial language from the PRIMARY system language only (i.e.
-// `navigator.languages[0]`). Matching on any 'zh' anywhere in the
-// fallback chain mis-flips English-OS users whose browser keeps zh-CN
-// in its language list as a secondary preference. The toggle stays
-// session-only; we don't persist it across visits.
+// Initial language precedence:
+//   1. ?lang=en or ?lang=zh in the URL — highest, lets visitors
+//      deep-link or escape a misconfigured browser.
+//   2. localStorage 'headsup_lang' — set by an explicit toggle click.
+//      Respecting the user's last manual choice is correct.
+//   3. navigator.languages[0] (primary browser language).
+// Matching on any 'zh' in the fallback chain (the previous logic) was
+// wrong: English-macOS users with Chinese-installed Chrome got Chinese.
 (function() {
+  var qs = new URLSearchParams(location.search);
+  var override = qs.get('lang');
+  if (override !== 'en' && override !== 'zh') override = null;
+  var saved = null;
+  try { saved = localStorage.getItem('headsup_lang'); } catch (e) {}
+  if (saved !== 'en' && saved !== 'zh') saved = null;
   var langs = navigator.languages && navigator.languages.length
     ? navigator.languages
     : [navigator.language || 'en'];
   var primary = String(langs[0] || 'en').toLowerCase();
-  var system = primary.indexOf('zh') === 0 ? 'zh' : 'en';
-  document.documentElement.dataset.langPref = system;
-  document.documentElement.lang = system === 'zh' ? 'zh-CN' : 'en';
+  var sys = primary.indexOf('zh') === 0 ? 'zh' : 'en';
+  var lang = override || saved || sys;
+  document.documentElement.dataset.langPref = lang;
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
 })();
 </script>
 <style>
@@ -372,9 +382,12 @@ _LANDING_HTML = """<!doctype html>
     document.getElementById('en').classList.toggle('on', lang === 'en');
     var btn = document.getElementById('copyBtn');
     if (btn && !btn.dataset.copied) btn.textContent = btn.dataset[lang];
-    // Don't persist across visits — toggle is session-only. We saw a
-    // real user with English OS land on Chinese because some earlier
-    // visit had stored 'zh', and the global was sticky.
+    // Persist the user's explicit toggle. This is their *manual* choice —
+    // we respect it on future visits. The previous bug wasn't that we
+    // saved on toggle, it was that we read localStorage even when the
+    // user had never clicked. (See head <script> for the precedence
+    // order: ?lang= > localStorage > primary system language.)
+    try { localStorage.setItem('headsup_lang', lang); } catch (e) {}
   }
   document.getElementById('zh').addEventListener('click', () => setLang('zh'));
   document.getElementById('en').addEventListener('click', () => setLang('en'));
@@ -386,17 +399,10 @@ _LANDING_HTML = """<!doctype html>
       setTimeout(() => { delete this.dataset.copied; this.textContent = t; }, 1500);
     });
   });
-  // Best-effort one-time cleanup of the legacy localStorage value so
-  // visitors who were stuck on the wrong language stop being stuck.
-  try { localStorage.removeItem('headsup_lang'); } catch (e) {}
-  // Initial language: PRIMARY system language only — i.e., what
-  // `navigator.languages[0]` reports. Previously we matched on any
-  // language in the list starting with "zh", which incorrectly flipped
-  // English-OS users with `zh-CN` somewhere in their fallback chain.
-  var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
-  var primary = String(langs[0] || 'en').toLowerCase();
-  var system = primary.indexOf('zh') === 0 ? 'zh' : 'en';
-  setLang(system);
+  // Read the same precedence chain the head script already computed
+  // and applied to <html data-lang-pref>. We just sync the JS state
+  // (toggle button, hidden classes, copy button label).
+  setLang(document.documentElement.dataset.langPref || 'en');
 })();
 </script>
 </body>
