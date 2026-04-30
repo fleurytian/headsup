@@ -213,8 +213,8 @@ _LANDING_HTML = """<!doctype html>
   }
   .phone-mock .dots .dot.active { background: var(--ink); }
 
-  /* Hero carousel — outer rotation between 5 real iOS screenshots and the
-     animated lock-screen mockup. Inherits .scenario fade timing. */
+  /* Hero carousel — outer rotation between the animated lock-screen mockup
+     and 5 real iOS screenshots. Inherits .scenario fade timing. */
   .hero-carousel { max-width: 320px; margin: 0 auto; }
   .hero-carousel .slot { display: none; }
   .hero-carousel .slot.active { display: block; animation: fadeIn 0.5s ease; }
@@ -223,6 +223,14 @@ _LANDING_HTML = """<!doctype html>
     border-radius: 32px;
     box-shadow: 0 20px 50px rgba(26,24,24,0.18);
     border: 1px solid var(--line);
+  }
+  /* When the lock-screen mockup is a carousel slot, drop its outer card
+     padding so the dark bezel sits flush at the same width as a screenshot. */
+  .hero-carousel .slot.mockup .phone-mock {
+    background: transparent; border: 0; padding: 0; max-width: none;
+  }
+  .hero-carousel .slot.mockup .phone-mock .frame {
+    box-shadow: 0 20px 50px rgba(26,24,24,0.18);
   }
   .hero-carousel .caption {
     margin-top: 14px; text-align: center;
@@ -401,43 +409,8 @@ _LANDING_HTML = """<!doctype html>
     <div class="col-right">
       <div class="hero-carousel">
 
-        <!-- Slot 1 — onboarding (Sign in with Apple) -->
-        <figure class="slot shot active">
-          <img src="/static/screenshots/01-onboarding.png" alt="Sign in" loading="lazy">
-          <figcaption class="caption" data-lang="en">sign in</figcaption>
-          <figcaption class="caption" data-lang="zh">登录</figcaption>
-        </figure>
-
-        <!-- Slot 2 — agent list / home -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/02-home.png" alt="Your agents" loading="lazy">
-          <figcaption class="caption" data-lang="en">your agents</figcaption>
-          <figcaption class="caption" data-lang="zh">你的 agents</figcaption>
-        </figure>
-
-        <!-- Slot 3 — authorize consent -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/03-authorize.png" alt="Authorize an agent" loading="lazy">
-          <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
-          <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
-        </figure>
-
-        <!-- Slot 4 — agent detail / history -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/04-detail.png" alt="Agent detail and history" loading="lazy">
-          <figcaption class="caption" data-lang="en">agent detail · history</figcaption>
-          <figcaption class="caption" data-lang="zh">agent 详情 · 历史</figcaption>
-        </figure>
-
-        <!-- Slot 5 — settings -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/05-settings.png" alt="Settings" loading="lazy">
-          <figcaption class="caption" data-lang="en">settings</figcaption>
-          <figcaption class="caption" data-lang="zh">设置</figcaption>
-        </figure>
-
-        <!-- Slot 6 — animated lock-screen mockup -->
-        <div class="slot mockup">
+        <!-- Slot 1 — animated lock-screen mockup (the elevator pitch) -->
+        <div class="slot mockup active">
         <div class="phone-mock" aria-hidden="true">
         <div class="frame">
           <div class="screen">
@@ -535,6 +508,41 @@ _LANDING_HTML = """<!doctype html>
         </div>
         </div>
         </div> <!-- /.slot.mockup -->
+
+        <!-- Slot 2 — onboarding -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/01-onboarding.png" alt="Sign in" loading="lazy">
+          <figcaption class="caption" data-lang="en">sign in</figcaption>
+          <figcaption class="caption" data-lang="zh">登录</figcaption>
+        </figure>
+
+        <!-- Slot 3 — home / agent list -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/02-home.png" alt="Your agents" loading="lazy">
+          <figcaption class="caption" data-lang="en">your agents</figcaption>
+          <figcaption class="caption" data-lang="zh">你的 agents</figcaption>
+        </figure>
+
+        <!-- Slot 4 — authorize consent -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/03-authorize.png" alt="Authorize an agent" loading="lazy">
+          <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
+          <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
+        </figure>
+
+        <!-- Slot 5 — agent detail / history -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/04-detail.png" alt="Agent detail and history" loading="lazy">
+          <figcaption class="caption" data-lang="en">agent detail · history</figcaption>
+          <figcaption class="caption" data-lang="zh">agent 详情 · 历史</figcaption>
+        </figure>
+
+        <!-- Slot 6 — settings -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/05-settings.png" alt="Settings" loading="lazy">
+          <figcaption class="caption" data-lang="en">settings</figcaption>
+          <figcaption class="caption" data-lang="zh">设置</figcaption>
+        </figure>
 
         <div class="outer-dots">
           <div class="dot active" data-i="0"></div>
