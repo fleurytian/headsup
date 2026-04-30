@@ -41,7 +41,6 @@ final class NotificationService: UNNotificationServiceExtension {
 
         let group = DispatchGroup()
         var imageFile: URL? = nil
-        var avatarFile: URL? = nil
         var avatarImage: INImage? = nil
 
         if let imageUrlString, let url = URL(string: imageUrlString) {
@@ -54,7 +53,6 @@ final class NotificationService: UNNotificationServiceExtension {
         if let avatarUrlString, let url = URL(string: avatarUrlString) {
             group.enter()
             downloadFile(url: url) { localUrl in
-                avatarFile = localUrl
                 if let localUrl, let data = try? Data(contentsOf: localUrl) {
                     avatarImage = INImage(imageData: data)
                 }
