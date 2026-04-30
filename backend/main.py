@@ -184,11 +184,34 @@ _LANDING_HTML = """<!doctype html>
   .phone-mock .notif .btns { display: flex; gap: 6px; margin-top: 10px; }
   .phone-mock .notif .btn-pill {
     flex: 1; text-align: center; padding: 6px 10px; border-radius: 999px;
-    border: 1px solid var(--ink); font-size: 11px; font-weight: 600;
+    font-size: 11px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   }
-  .phone-mock .notif .btn-pill.alt {
-    border-color: var(--line); color: var(--muted); font-weight: 500;
+  /* Mirrors the app icon: purple ✓ + ink ✗ pair. */
+  .phone-mock .notif .btn-pill.yes {
+    border: 1px solid var(--accent); color: var(--accent);
   }
+  .phone-mock .notif .btn-pill.yes::before {
+    content: "✓"; font-weight: 800; font-size: 13px; line-height: 0;
+  }
+  .phone-mock .notif .btn-pill.no {
+    border: 1px solid var(--ink); color: var(--ink);
+  }
+  .phone-mock .notif .btn-pill.no::before {
+    content: "✕"; font-weight: 800; font-size: 12px; line-height: 0;
+  }
+  /* Carousel — fade between scenarios every 5s */
+  .phone-mock .scenario { display: none; }
+  .phone-mock .scenario.active { display: block; animation: fadeIn 0.5s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .phone-mock .dots {
+    display: flex; justify-content: center; gap: 6px; margin-top: 14px;
+  }
+  .phone-mock .dots .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--line); transition: background 0.3s;
+  }
+  .phone-mock .dots .dot.active { background: var(--ink); }
   .eyebrow {
     font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
     color: var(--muted); text-transform: lowercase;
@@ -353,25 +376,94 @@ _LANDING_HTML = """<!doctype html>
         <div class="frame">
           <div class="screen">
             <div class="lock-time">9:41</div>
-            <div class="notif">
-              <div class="top"><span class="dot-purple"></span> CLAUDE CODE · NOW</div>
-              <div class="title" data-lang="en">Deploy to prod?</div>
-              <div class="title" data-lang="zh">上线到生产?</div>
-              <div class="body" data-lang="en">build #4287 · 12 commits ahead. Looks clean. (long-press to reply)</div>
-              <div class="body" data-lang="zh">build #4287 · 比线上多 12 个 commit,看着没问题。(长按回复)</div>
-              <div class="btns">
-                <div class="btn-pill" data-lang="en">Ship it</div>
-                <div class="btn-pill" data-lang="zh">上线</div>
-                <div class="btn-pill alt" data-lang="en">Wait</div>
-                <div class="btn-pill alt" data-lang="zh">等等</div>
+
+            <!-- Scenario 1 — Claude Code: deploy gate -->
+            <div class="scenario active">
+              <div class="notif">
+                <div class="top"><span class="dot-purple"></span> CLAUDE CODE · NOW</div>
+                <div class="title" data-lang="en">Deploy to prod?</div>
+                <div class="title" data-lang="zh">上线到生产?</div>
+                <div class="body" data-lang="en">build #4287 · 12 commits ahead. Looks clean.</div>
+                <div class="body" data-lang="zh">build #4287 · 比线上多 12 个 commit,看着没问题。</div>
+                <div class="btns">
+                  <div class="btn-pill yes" data-lang="en">Ship</div>
+                  <div class="btn-pill yes" data-lang="zh">上线</div>
+                  <div class="btn-pill no" data-lang="en">Hold</div>
+                  <div class="btn-pill no" data-lang="zh">等等</div>
+                </div>
+              </div>
+              <div class="notif">
+                <div class="top"><span class="dot-purple" style="background:#D97757"></span> HERMES · 5 min ago</div>
+                <div class="title" data-lang="en">Reservation confirmed.</div>
+                <div class="title" data-lang="zh">预定确认。</div>
+                <div class="body" data-lang="en">Sushi Yasuda, Fri 7:30pm, 4 pax.</div>
+                <div class="body" data-lang="zh">Sushi Yasuda 周五 7:30, 4 位。</div>
               </div>
             </div>
-            <div class="notif">
-              <div class="top"><span class="dot-purple" style="background:#D97757"></span> HERMES · 5 min ago</div>
-              <div class="title" data-lang="en">Reservation confirmed.</div>
-              <div class="title" data-lang="zh">预定确认。</div>
-              <div class="body" data-lang="en">Sushi Yasuda, 7:30pm, 4 pax.</div>
-              <div class="body" data-lang="zh">Sushi Yasuda 周五 7:30, 4 位。</div>
+
+            <!-- Scenario 2 — Codex: long-running task done -->
+            <div class="scenario">
+              <div class="notif">
+                <div class="top"><span class="dot-purple" style="background:#10A37F"></span> CODEX · NOW</div>
+                <div class="title" data-lang="en">Migration ready for review.</div>
+                <div class="title" data-lang="zh">迁移脚本已就绪,等你确认。</div>
+                <div class="body" data-lang="en">42 tables, 3 destructive ops flagged. Diff in PR #218.</div>
+                <div class="body" data-lang="zh">42 张表,3 处破坏性操作已标注。Diff 在 PR #218。</div>
+                <div class="btns">
+                  <div class="btn-pill yes" data-lang="en">Approve</div>
+                  <div class="btn-pill yes" data-lang="zh">通过</div>
+                  <div class="btn-pill no" data-lang="en">Reject</div>
+                  <div class="btn-pill no" data-lang="zh">驳回</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scenario 3 — OpenClaw: alert with snooze -->
+            <div class="scenario">
+              <div class="notif">
+                <div class="top"><span class="dot-purple" style="background:#E8A33D"></span> OPENCLAW · 2 min ago</div>
+                <div class="title" data-lang="en">.md domain available.</div>
+                <div class="title" data-lang="zh">捕到一个 .md 域名。</div>
+                <div class="body" data-lang="en">letterbox.md just dropped. Snipe before 09:42 PT.</div>
+                <div class="body" data-lang="zh">letterbox.md 刚释放,09:42 PT 前下手。</div>
+                <div class="btns">
+                  <div class="btn-pill yes" data-lang="en">Buy</div>
+                  <div class="btn-pill yes" data-lang="zh">下单</div>
+                  <div class="btn-pill no" data-lang="en">Skip</div>
+                  <div class="btn-pill no" data-lang="zh">跳过</div>
+                </div>
+              </div>
+              <div class="notif">
+                <div class="top"><span class="dot-purple"></span> CLAUDE CODE · 1 hr ago</div>
+                <div class="title" data-lang="en">Tests passing on main.</div>
+                <div class="title" data-lang="zh">main 分支测试已通过。</div>
+                <div class="body" data-lang="en">28 / 28 green. No flakes.</div>
+                <div class="body" data-lang="zh">28 / 28 全绿,无抖动。</div>
+              </div>
+            </div>
+
+            <!-- Scenario 4 — Personal agent / yes-no -->
+            <div class="scenario">
+              <div class="notif">
+                <div class="top"><span class="dot-purple" style="background:#7C5CFC"></span> KIMI · NOW</div>
+                <div class="title" data-lang="en">Coffee with Yu at 3pm?</div>
+                <div class="title" data-lang="zh">3 点和 Yu 喝咖啡?</div>
+                <div class="body" data-lang="en">Calendar's clear. He's flexible on the spot.</div>
+                <div class="body" data-lang="zh">日历是空的,他地点也随便。</div>
+                <div class="btns">
+                  <div class="btn-pill yes" data-lang="en">Yes</div>
+                  <div class="btn-pill yes" data-lang="zh">好</div>
+                  <div class="btn-pill no" data-lang="en">No</div>
+                  <div class="btn-pill no" data-lang="zh">不行</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="dots">
+              <div class="dot active"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
             </div>
           </div>
         </div>
@@ -419,6 +511,29 @@ _LANDING_HTML = """<!doctype html>
   // and applied to <html data-lang-pref>. We just sync the JS state
   // (toggle button, hidden classes, copy button label).
   setLang(document.documentElement.dataset.langPref || 'en');
+
+  // ── Phone-mock scenario carousel ──────────────────────────────────────────
+  // Rotate through the notification scenarios every 5s. Pauses on hover so a
+  // visitor can read whichever one caught their eye.
+  const scenarios = document.querySelectorAll('.phone-mock .scenario');
+  const dots = document.querySelectorAll('.phone-mock .dots .dot');
+  if (scenarios.length > 1) {
+    let i = 0;
+    let paused = false;
+    const phone = document.querySelector('.phone-mock');
+    if (phone) {
+      phone.addEventListener('mouseenter', () => { paused = true; });
+      phone.addEventListener('mouseleave', () => { paused = false; });
+    }
+    setInterval(() => {
+      if (paused) return;
+      scenarios[i].classList.remove('active');
+      dots[i] && dots[i].classList.remove('active');
+      i = (i + 1) % scenarios.length;
+      scenarios[i].classList.add('active');
+      dots[i] && dots[i].classList.add('active');
+    }, 5000);
+  }
 })();
 </script>
 </body>
