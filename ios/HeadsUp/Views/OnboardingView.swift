@@ -55,20 +55,13 @@ struct OnboardingView: View {
                 Spacer().frame(height: 60)
 
                 HStack {
-                    Eyebrow(text: "headsup · md")
+                    BrandedTitleBar()
                     Spacer()
                     LanguageToggle()
                 }
                 .padding(.horizontal, 32)
 
-                Spacer().frame(height: 14)
-
-                Circle()
-                    .fill(HU.C.accent)
-                    .frame(width: 18, height: 18)
-                    .padding(.horizontal, 32)
-
-                Spacer().frame(height: 30)
+                Spacer().frame(height: 36)
 
                 VStack(alignment: .leading, spacing: 12) {
                     LText(
