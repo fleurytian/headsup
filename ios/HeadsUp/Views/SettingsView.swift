@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import StoreKit
 import UserNotifications
 
 struct SettingsView: View {
@@ -163,6 +164,8 @@ struct SettingsView: View {
                     // — they're identity / engagement surfaces, not system
                     // configuration, so they don't belong in Settings.
 
+                    TipJarSection()
+
                     SettingsSection(title: "about") {
                         VStack(alignment: .leading, spacing: 0) {
                             SettingsKeyValue(key: "version", value: HU.versionString)
@@ -195,24 +198,27 @@ struct SettingsView: View {
                                 .padding(.horizontal, 16).padding(.vertical, 14)
                             }
                             Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            // GitHub Sponsors path — external (no Apple
+                            // cut, but we can't auto-detect the donation,
+                            // so users get a redeem code emailed to them
+                            // and enter it via the row below.
                             Link(destination: URL(string: "https://github.com/sponsors/fleurytian")!) {
                                 HStack {
-                                    LText("赞助 / 捐赠", "Donate")
-                                        .font(HU.body()).foregroundStyle(HU.C.ink)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        LText("赞助 (网页)", "Sponsor (web)")
+                                            .font(HU.body()).foregroundStyle(HU.C.ink)
+                                        LText("GitHub Sponsors · 全额到我们", "GitHub Sponsors · we keep 100%")
+                                            .font(HU.small()).foregroundStyle(HU.C.muted)
+                                    }
                                     Spacer()
-                                    Text("☕️").font(HU.small())
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption.weight(.medium))
                                         .foregroundStyle(HU.C.muted)
                                 }
                                 .padding(.horizontal, 16).padding(.vertical, 14)
                             }
-                            // Trust-based supporter claim. Awards the
-                            // Supporter badge with no actual GitHub
-                            // Sponsors webhook integration. The honor
-                            // system works because the badge has zero
-                            // mechanical value — it's just a thanks.
-                            DonationClaimRow()
+                            Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
+                            RedeemCodeRow()
                             Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
                             Link(destination: URL(string: "https://headsup.md/privacy")!) {
                                 HStack {
@@ -491,61 +497,216 @@ private struct DemoPushButton: View {
     }
 }
 
-/// "I donated" trust button. Hits POST /v1/app/me/claim-supporter,
-/// which awards the Supporter badge to the user. There's no
-/// GitHub-Sponsors-side verification today; we lean on the badge
-/// being purely cosmetic so the honor system is good enough.
-private struct DonationClaimRow: View {
-    @State private var claiming = false
-    @State private var claimed = false
+/// "Have a redeem code?" row. The companion to the GitHub Sponsors web
+/// link above it: after a user donates on GitHub Sponsors we email them
+/// a one-time code (manually for now, GitHub-Sponsors-webhook later);
+/// they paste it here to claim the Supporter badge. No code? Nothing
+/// happens — and the IAP path doesn't need a code at all.
+private struct RedeemCodeRow: View {
+    @State private var showSheet = false
+    @EnvironmentObject var loc: Localizer
 
     var body: some View {
         Button {
-            Task { await claim() }
+            showSheet = true
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: claimed ? "checkmark.seal.fill" : "heart.fill")
+                Image(systemName: "ticket.fill")
                     .font(.body.weight(.medium))
-                    .foregroundStyle(claimed ? HU.C.accent : HU.C.muted)
+                    .foregroundStyle(HU.C.muted)
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
-                    LText(claimed ? "谢谢你的支持 💝" : "我捐了,给我个徽章",
-                          claimed ? "Thanks for the support 💝" : "I donated — give me the badge")
+                    LText("我有兑换码", "I have a redeem code")
                         .font(HU.body(.medium)).foregroundStyle(HU.C.ink)
-                    if !claimed {
-                        LText("解锁 Supporter 徽章。基于信任。",
-                              "Unlocks the Supporter badge. Honor system.")
-                            .font(HU.small()).foregroundStyle(HU.C.muted)
-                    }
+                    LText("Sponsor 后我们邮件发给你的那串码",
+                          "The one-time code we email after a Sponsor donation")
+                        .font(HU.small()).foregroundStyle(HU.C.muted)
                 }
                 Spacer()
-                if claiming {
-                    ProgressView().scaleEffect(0.7).tint(HU.C.muted)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(HU.C.muted.opacity(0.7))
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
         }
         .buttonStyle(.plain)
-        .disabled(claiming || claimed)
+        .sheet(isPresented: $showSheet) { RedeemCodeSheet() }
+    }
+}
+
+private struct RedeemCodeSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var code: String = ""
+    @State private var working = false
+    @State private var result: String? = nil
+    @State private var success = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                HU.C.bg.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Eyebrow(text: "redeem")
+
+                        LText("把邮件里的兑换码粘到下面 — 我们会立刻给你 Supporter 徽章。",
+                              "Paste the code we emailed you. We'll grant the Supporter badge right away.")
+                            .font(HU.body())
+                            .foregroundStyle(HU.C.muted)
+                            .lineSpacing(3)
+
+                        TextField("ABCD-1234", text: $code)
+                            .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                            .autocapitalization(.allCharacters)
+                            .disableAutocorrection(true)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 14)
+                            .background(HU.C.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(HU.C.line, lineWidth: 1)
+                            )
+
+                        Button {
+                            Task { await redeem() }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if working {
+                                    ProgressView().tint(HU.C.bg)
+                                } else {
+                                    LText("兑换", "Redeem")
+                                        .font(HU.body(.semibold)).foregroundStyle(HU.C.bg)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 14)
+                            .background(Capsule().fill(HU.C.ink))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(working || code.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                        if let r = result {
+                            Text(r)
+                                .font(HU.small())
+                                .foregroundStyle(success ? HU.C.accent : HU.C.muted)
+                                .padding(.top, 4)
+                        }
+
+                        Spacer().frame(height: 60)
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle(T("兑换码", "Redeem code"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(T("关闭", "Close")) { dismiss() }
+                }
+            }
+        }
     }
 
-    private func claim() async {
+    private func redeem() async {
         guard let session = AuthService.shared.session else { return }
-        claiming = true
-        defer { claiming = false }
-        struct Empty: Encodable {}
-        struct EmptyResp: Decodable {}
+        working = true
+        defer { working = false }
+        struct Body: Encodable { let code: String }
+        struct Resp: Decodable { let status: String? }
         do {
-            // 204 returns no body; APIClient handles empty content fine.
-            let _: EmptyResp? = try? await APIClient.shared.post(
-                "/v1/app/me/claim-supporter",
-                body: Empty(),
+            let _: Resp = try await APIClient.shared.post(
+                "/v1/app/me/redeem-supporter-code",
+                body: Body(code: code.trimmingCharacters(in: .whitespaces).uppercased()),
                 sessionToken: session.sessionToken
             )
-            claimed = true
-            // Force the home/profile dashboards to re-fetch their badge counts.
+            success = true
+            result = T("✅ 兑换成功 — Supporter 徽章已到帐!", "✅ Redeemed — Supporter badge granted.")
             NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
+        } catch APIError.http(404, _) {
+            result = T("找不到这个兑换码,检查一下拼写。",
+                       "Code not found. Double-check the spelling.")
+        } catch APIError.http(410, _) {
+            result = T("这个码已经被别人兑换过了。",
+                       "This code has already been redeemed by someone else.")
+        } catch {
+            result = error.localizedDescription
         }
+    }
+}
+
+/// Three-tier StoreKit IAP tip jar. Apple takes 15-30%, but the path
+/// gives you instant Apple-Pay convenience and auto-awards the badge
+/// without an email roundtrip — for users who just want to drop a tip
+/// and move on.
+struct TipJarSection: View {
+    @StateObject private var tipJar = TipJarService.shared
+    @EnvironmentObject var loc: Localizer
+
+    var body: some View {
+        SettingsSection(title: "tip jar / Apple Pay") {
+            VStack(alignment: .leading, spacing: 0) {
+                if tipJar.products.isEmpty {
+                    Text(loc.lang == .zh
+                         ? "Tip jar 暂时无法加载 — 网络问题或者还没在 App Store Connect 配置 IAP 商品。"
+                         : "Tip jar unavailable — likely a network issue or IAP products not yet configured in App Store Connect.")
+                        .font(HU.small())
+                        .foregroundStyle(HU.C.muted)
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                } else {
+                    LText("用 Apple Pay 一键打赏 — 徽章自动到帐。",
+                          "Tip with Apple Pay — Supporter badge unlocks automatically.")
+                        .font(HU.small())
+                        .foregroundStyle(HU.C.muted)
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+                    HStack(spacing: 8) {
+                        ForEach(tipJar.products, id: \.id) { p in
+                            TipButton(product: p,
+                                      busy: tipJar.purchasingID == p.id) {
+                                Task { await tipJar.purchase(p) }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12).padding(.bottom, 12)
+                    if tipJar.thanked {
+                        Text("💝 " + (loc.lang == .zh ? "谢谢你!" : "Thank you!"))
+                            .font(HU.small(.semibold))
+                            .foregroundStyle(HU.C.accent)
+                            .padding(.horizontal, 16).padding(.bottom, 12)
+                    }
+                }
+            }
+            .card()
+        }
+    }
+}
+
+private struct TipButton: View {
+    let product: Product
+    let busy: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Text(product.displayPrice)
+                    .font(HU.body(.semibold))
+                    .foregroundStyle(HU.C.ink)
+                Text(product.displayName.isEmpty ? product.id : product.displayName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(HU.C.muted)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Capsule().strokeBorder(HU.C.ink, lineWidth: 1))
+            .overlay {
+                if busy { ProgressView().scaleEffect(0.7).tint(HU.C.muted) }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
     }
 }
 

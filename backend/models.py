@@ -168,6 +168,36 @@ class Badge(SQLModel, table=True):
     early: bool = Field(default=False)             # surfaced as locked-list filter
 
 
+class SupporterCode(SQLModel, table=True):
+    """One-time redeem code that grants the Supporter badge.
+
+    Used for the GitHub Sponsors flow where we can't (cheaply) verify the
+    donor → AppUser link directly: a sponsor donates on GitHub, we issue
+    a code (manual today, GitHub-Sponsors-webhook later), they paste it
+    into the app, server marks it claimed + awards the badge. Codes are
+    short (8 chars) and case-insensitive on lookup.
+
+    The IAP path (StoreKit consumable purchase) doesn't use codes — it
+    awards directly from the verified StoreKit transaction.
+    """
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    # Short, human-typeable. Generated server-side. Kept in upper case
+    # for display and looked up case-insensitively.
+    code: str = Field(unique=True, index=True)
+    # Free-form note for the operator: GitHub login, sponsorship tier,
+    # whatever helps remember why this code exists.
+    note: Optional[str] = None
+    # Source tag — "github_sponsors" today; "promo" / "gift" later.
+    source: str = Field(default="github_sponsors", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # When non-null, this code has already been redeemed. Idempotent
+    # re-redemption returns 410.
+    claimed_at: Optional[datetime] = None
+    claimed_by_user_id: Optional[str] = Field(
+        default=None, foreign_key="appuser.id", index=True
+    )
+
+
 class EarnedBadge(SQLModel, table=True):
     """A badge earned by either a user or an agent.
 

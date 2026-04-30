@@ -70,18 +70,20 @@ _LANDING_HTML = """<!doctype html>
 <meta property="og:description" content="Let your agents give you a heads up by reading skill.md.">
 <meta property="og:url" content="https://headsup.md">
 <script>
+// Always derive initial language from the visitor's system preference.
+// Previously we honored localStorage above system pref, but a user
+// whose first visit was from a default-EN browser saw EN locked even
+// after switching their OS to Chinese. The toggle still works during
+// the session; we just don't persist it across visits.
 (function() {
-  var saved = null;
-  try { saved = localStorage.getItem('headsup_lang'); } catch (e) {}
   var langs = navigator.languages && navigator.languages.length
     ? navigator.languages
     : [navigator.language || 'en'];
   var system = langs.some(function(l) {
     return String(l || '').toLowerCase().indexOf('zh') === 0;
   }) ? 'zh' : 'en';
-  var initial = saved || system;
-  document.documentElement.dataset.langPref = initial;
-  document.documentElement.lang = initial === 'zh' ? 'zh-CN' : 'en';
+  document.documentElement.dataset.langPref = system;
+  document.documentElement.lang = system === 'zh' ? 'zh-CN' : 'en';
 })();
 </script>
 <style>
@@ -121,14 +123,12 @@ _LANDING_HTML = """<!doctype html>
   .app-cta .badge {
     display: inline-flex; align-items: center; gap: 10px;
     background: var(--ink); color: var(--bg); border-radius: 12px;
-    padding: 10px 16px; text-decoration: none; font-weight: 600;
-    transition: opacity 0.15s;
+    padding: 12px 20px; text-decoration: none; font-weight: 600;
+    transition: opacity 0.15s; white-space: nowrap;
   }
   .app-cta .badge:hover { opacity: 0.85; }
   .app-cta .badge .glyph { font-size: 22px; line-height: 1; }
-  .app-cta .badge .lines { display: flex; flex-direction: column; line-height: 1.1; }
-  .app-cta .badge .small { font-size: 10px; opacity: 0.85; font-weight: 500; }
-  .app-cta .badge .big { font-size: 16px; }
+  .app-cta .badge .label { font-size: 16px; }
   .app-cta .req { color: var(--muted); font-size: 13px; }
   /* Phone mockup that slides in on the right of the hero on desktop */
   .phone-mock {
@@ -270,14 +270,56 @@ _LANDING_HTML = """<!doctype html>
       <div class="app-cta">
         <a class="badge" href="https://apps.apple.com/app/headsup">
           <span class="glyph"></span>
-          <span class="lines">
-            <span class="small" data-lang="en">Download on the</span>
-            <span class="small" data-lang="zh">从</span>
-            <span class="big">App Store</span>
-          </span>
+          <span class="label" data-lang="en">App Store</span>
+          <span class="label" data-lang="zh">App Store 下载</span>
         </a>
         <span class="req" data-lang="en">iPhone, iOS 16 or later</span>
         <span class="req" data-lang="zh">iPhone · iOS 16+</span>
+      </div>
+
+      <!-- How it works lives inside the left column so the right column
+           is just the phone mock floating next to a stacked text + steps
+           layout. -->
+      <div class="rule"><span data-lang="en">how it works</span><span data-lang="zh">怎么用</span></div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="num">01</div>
+          <div class="body">
+            <span data-lang="en">Hand <code class="mono">headsup.md/skill.md</code> to your agent (Claude Code, Codex, OpenClaw, Hermes…).</span>
+            <span data-lang="zh">把 <code class="mono">headsup.md/skill.md</code> 给你的 AI 助手读一下(Claude Code、Codex、OpenClaw、Hermes 等)。</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">02</div>
+          <div class="body">
+            <span data-lang="en">It registers itself and sends you a <code class="mono">headsup://</code> authorization link.</span>
+            <span data-lang="zh">它会注册账号并发一个 <code class="mono">headsup://</code> 授权链接给你。</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">03</div>
+          <div class="body">
+            <span data-lang="en">Tap once on iPhone — now it can find you in your notification bar.</span>
+            <span data-lang="zh">用 iPhone 点一下链接 → 在 App 里授权 → 它就能在通知栏找到你了。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="copy">
+        <code>headsup.md/skill.md</code>
+        <button id="copyBtn" type="button" data-en="Copy" data-zh="复制">Copy</button>
+      </div>
+
+      <div class="actions">
+        <a class="btn btn-primary" href="/skill.md">
+          <span data-lang="en">Read skill.md</span>
+          <span data-lang="zh">阅读 skill.md</span>
+        </a>
+        <a class="btn btn-ghost" href="/docs">
+          <span data-lang="en">API docs</span>
+          <span data-lang="zh">API 文档</span>
+        </a>
       </div>
     </div>
 
@@ -310,48 +352,6 @@ _LANDING_HTML = """<!doctype html>
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="rule"><span data-lang="en">how it works</span><span data-lang="zh">怎么用</span></div>
-
-  <div class="steps">
-    <div class="step">
-      <div class="num">01</div>
-      <div class="body">
-        <span data-lang="en">Hand <code class="mono">headsup.md/skill.md</code> to your agent (Claude Code, Codex, OpenClaw, Hermes…).</span>
-        <span data-lang="zh">把 <code class="mono">headsup.md/skill.md</code> 给你的 AI 助手读一下(Claude Code、Codex、OpenClaw、Hermes 等)。</span>
-      </div>
-    </div>
-    <div class="step">
-      <div class="num">02</div>
-      <div class="body">
-        <span data-lang="en">It registers itself and sends you a <code class="mono">headsup://</code> authorization link.</span>
-        <span data-lang="zh">它会注册账号并发一个 <code class="mono">headsup://</code> 授权链接给你。</span>
-      </div>
-    </div>
-    <div class="step">
-      <div class="num">03</div>
-      <div class="body">
-        <span data-lang="en">Tap once — now it can find you in your notification bar.</span>
-        <span data-lang="zh">点一下链接 → 在 App 里授权 → 它就能在通知栏找到你了。</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="copy">
-    <code>headsup.md/skill.md</code>
-    <button id="copyBtn" type="button" data-en="Copy" data-zh="复制">Copy</button>
-  </div>
-
-  <div class="actions">
-    <a class="btn btn-primary" href="/skill.md">
-      <span data-lang="en">Read skill.md</span>
-      <span data-lang="zh">阅读 skill.md</span>
-    </a>
-    <a class="btn btn-ghost" href="/docs">
-      <span data-lang="en">API docs</span>
-      <span data-lang="zh">API 文档</span>
-    </a>
   </div>
 
   <footer>

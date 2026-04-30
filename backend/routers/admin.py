@@ -23,6 +23,7 @@ from models import (
     AppUser,
     Event,
     PushMessage,
+    SupporterCode,
     WebhookDelivery,
 )
 

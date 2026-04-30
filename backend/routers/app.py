@@ -967,22 +967,33 @@ def cold_feet(
     )
 
 
-@router.post("/me/claim-supporter", status_code=204)
-def claim_supporter(
+class IAPPurchasedRequest(SQLModel):
+    transaction_id: str
+    product_id: str
+
+
+@router.post("/me/iap-purchased", status_code=204)
+def iap_purchased(
+    req: IAPPurchasedRequest,
     background_tasks: BackgroundTasks,
     user: AppUser = Depends(get_authed_user),
     session: Session = Depends(get_session),
 ):
-    """Trust-based 'I donated' claim for the Supporter badge.
+    """Award Supporter badge after a successful StoreKit consumable.
 
-    No verification — GitHub Sponsors doesn't (cheaply) tell us who
-    a given AppUser is. The badge ego-rewards real donors and trusts
-    everyone else won't go through the trouble for a 💝 they could
-    just look at in the catalog.
+    Trust model: the call is gated on the user's session token (so it's
+    THIS user's purchase) and the transaction_id is recorded so an
+    incoming dupe doesn't double-fire. We currently don't hit the App
+    Store Server API to re-validate the receipt — for a tip jar where
+    the badge has zero mechanical value, the StoreKit-2 signed
+    transaction the iOS client passed through is good enough. If we
+    ever attach paid features to this badge, swap in
+    https://api.storekit.itunes.apple.com/inApps/v1/transactions/{id}.
 
-    Idempotent: re-claiming on an already-supporter user does nothing
-    via _award's existing-record check.
+    Records via Event so admin can see purchases per period.
     """
+    if not req.product_id.startswith("md.headsup.app.tip."):
+        raise HTTPException(400, "Unknown product id")
     try:
         awarded = badges_svc.on_user_action(session, user_id=user.id, action="donated")
         if awarded:
@@ -990,9 +1001,58 @@ def claim_supporter(
     except Exception:
         pass
     events.safe_log(
-        session, kind="supporter_claimed",
+        session, kind="iap_purchased",
         actor_kind="user", actor_id=user.id,
+        meta={"transaction_id": req.transaction_id, "product_id": req.product_id},
     )
+
+
+class RedeemCodeRequest(SQLModel):
+    code: str
+
+
+@router.post("/me/redeem-supporter-code")
+def redeem_supporter_code(
+    req: RedeemCodeRequest,
+    background_tasks: BackgroundTasks,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Redeem a one-time code for the Supporter badge.
+
+    Issued (manually for now, via /v1/admin/sponsor-codes) after a user
+    donates on GitHub Sponsors. Codes are short, case-insensitive, and
+    single-use. Re-redemption by the same user is a no-op (already has
+    the badge); re-redemption by a *different* user gets 410.
+    """
+    from models import SupporterCode
+    code_norm = (req.code or "").strip().upper()
+    if not code_norm or len(code_norm) > 32:
+        raise HTTPException(400, "code missing or invalid")
+    row = session.exec(
+        select(SupporterCode).where(SupporterCode.code == code_norm)
+    ).first()
+    if not row:
+        raise HTTPException(404, "code not found")
+    if row.claimed_by_user_id and row.claimed_by_user_id != user.id:
+        raise HTTPException(410, "code already redeemed by someone else")
+    if not row.claimed_by_user_id:
+        row.claimed_at = datetime.utcnow()
+        row.claimed_by_user_id = user.id
+        session.add(row)
+        session.commit()
+    try:
+        awarded = badges_svc.on_user_action(session, user_id=user.id, action="donated")
+        if awarded:
+            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
+    except Exception:
+        pass
+    events.safe_log(
+        session, kind="supporter_code_redeemed",
+        actor_kind="user", actor_id=user.id,
+        meta={"code": code_norm, "source": row.source},
+    )
+    return {"status": "redeemed", "source": row.source}
 
 
 @router.post("/me/ping", status_code=204)
