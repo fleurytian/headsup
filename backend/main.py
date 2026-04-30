@@ -417,49 +417,49 @@ _LANDING_HTML = """<!doctype html>
 
         <!-- Slot 1 — onboarding -->
         <figure class="slot shot active">
-          <img src="/static/screenshots/01-onboarding.png" alt="Sign in" loading="lazy">
+          <img src="/static/screenshots/01-onboarding.webp" alt="Sign in" loading="lazy">
           <figcaption class="caption" data-lang="en">sign in</figcaption>
           <figcaption class="caption" data-lang="zh">登录</figcaption>
         </figure>
 
         <!-- Slot 2 — home / agent list -->
         <figure class="slot shot">
-          <img src="/static/screenshots/02-home.png" alt="Your agents" loading="lazy">
+          <img src="/static/screenshots/02-home.webp" alt="Your agents" loading="lazy">
           <figcaption class="caption" data-lang="en">your agents</figcaption>
           <figcaption class="caption" data-lang="zh">你的 agents</figcaption>
         </figure>
 
         <!-- Slot 3 — push arrives on lock screen -->
         <figure class="slot shot">
-          <img src="/static/screenshots/06-push-collapsed.png" alt="Push arrives on the lock screen" loading="lazy">
+          <img src="/static/screenshots/06-push-collapsed.webp" alt="Push arrives on the lock screen" loading="lazy">
           <figcaption class="caption" data-lang="en">it lands on your lock screen</figcaption>
           <figcaption class="caption" data-lang="zh">直接落到你的锁屏</figcaption>
         </figure>
 
         <!-- Slot 4 — push expanded with image + 4 actions -->
         <figure class="slot shot">
-          <img src="/static/screenshots/07-push-expanded.png" alt="Long-press to see image and reply options" loading="lazy">
+          <img src="/static/screenshots/07-push-expanded.webp" alt="Long-press to see image and reply options" loading="lazy">
           <figcaption class="caption" data-lang="en">long-press to reply with one tap</figcaption>
           <figcaption class="caption" data-lang="zh">长按一键回复</figcaption>
         </figure>
 
         <!-- Slot 5 — authorize consent -->
         <figure class="slot shot">
-          <img src="/static/screenshots/03-authorize.png" alt="Authorize an agent" loading="lazy">
+          <img src="/static/screenshots/03-authorize.webp" alt="Authorize an agent" loading="lazy">
           <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
           <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
         </figure>
 
         <!-- Slot 6 — agent detail / history -->
         <figure class="slot shot">
-          <img src="/static/screenshots/04-detail.png" alt="Agent detail and history" loading="lazy">
+          <img src="/static/screenshots/04-detail.webp" alt="Agent detail and history" loading="lazy">
           <figcaption class="caption" data-lang="en">agent detail · history</figcaption>
           <figcaption class="caption" data-lang="zh">agent 详情 · 历史</figcaption>
         </figure>
 
         <!-- Slot 7 — settings -->
         <figure class="slot shot">
-          <img src="/static/screenshots/05-settings.png" alt="Settings" loading="lazy">
+          <img src="/static/screenshots/05-settings.webp" alt="Settings" loading="lazy">
           <figcaption class="caption" data-lang="en">settings</figcaption>
           <figcaption class="caption" data-lang="zh">设置</figcaption>
         </figure>
