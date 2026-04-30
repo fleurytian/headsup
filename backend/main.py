@@ -540,6 +540,29 @@ _LANDING_HTML = """<!doctype html>
       d.addEventListener('click', () => { go(idx); paused = true; });
     });
     setInterval(() => { if (!paused) go(i + 1); }, 5500);
+
+    // Swipe to switch on touch devices. Threshold = 40px so an accidental
+    // vertical scroll doesn't trigger a slide change.
+    if (carousel) {
+      let startX = 0, startY = 0, tracking = false;
+      carousel.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return;
+        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        tracking = true;
+      }, {passive: true});
+      carousel.addEventListener('touchend', (e) => {
+        if (!tracking) return;
+        tracking = false;
+        const t = (e.changedTouches && e.changedTouches[0]) || null;
+        if (!t) return;
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        // Horizontal swipe only — let vertical pass through to page scroll.
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+        paused = true;            // user took control; auto-rotate yields
+        go(dx < 0 ? i + 1 : i - 1);
+      }, {passive: true});
+    }
   }
 })();
 </script>
