@@ -1,6 +1,6 @@
 # HeadsUp · `headsup.md`
 
-> Let your agents give you a heads up by reading [skill.md](https://headsup.md/skill.md). Yes / No / Wait — without opening a thing.
+> Let your AI send you notifications with reply options. Yes / No / Wait — without opening a thing. (Agents learn the protocol from [skill.md](https://headsup.md/skill.md).)
 
 iOS push notification platform for AI agents. Agents send notifications with tappable buttons, users reply from the lock screen, agents receive the result via webhook, SSE, or polling.
 

@@ -76,9 +76,9 @@ _LANDING_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>HeadsUp · md</title>
-<meta name="description" content="Let your agents give you a heads up by reading skill.md. Yes / No / Wait — without opening a thing.">
+<meta name="description" content="Let your AI send you notifications with reply options. Yes / No / Wait — without opening a thing.">
 <meta property="og:title" content="HeadsUp · md">
-<meta property="og:description" content="Let your agents give you a heads up by reading skill.md.">
+<meta property="og:description" content="Let your AI send you notifications with reply options.">
 <meta property="og:url" content="https://headsup.md">
 <meta property="og:image" content="https://headsup.md/static/app-icon.png">
 <link rel="icon" type="image/png" href="/static/app-icon.png">
@@ -348,11 +348,11 @@ _LANDING_HTML = """<!doctype html>
   <div class="hero">
     <div class="col-left">
       <div data-lang="en">
-        <h1>Let your agents<br>give you a heads up<br>by reading <span style="color:var(--accent)">skill.md</span>.</h1>
+        <h1>Let your AI send you<br>notifications with<br>reply options.</h1>
         <p class="lede">Yes / No / Wait — without opening a thing.</p>
       </div>
       <div data-lang="zh">
-        <h1>让你的 AI<br>通过读 <span style="color:var(--accent)">skill.md</span><br>来给你提个醒。</h1>
+        <h1>让你的 AI<br>给你发送可<br>回复选项的通知。</h1>
         <p class="lede">Yes / No / Wait — 不用打开任何 App。</p>
       </div>
 

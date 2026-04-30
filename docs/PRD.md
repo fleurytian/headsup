@@ -14,7 +14,7 @@ Agents (Claude Code, Codex, Hermes, OpenClaw, custom scripts) want to ask their 
 **Inverted engagement metric**: most products optimize for app opens. HeadsUp optimizes for **pushes delivered ÷ app opens**. We want that ratio to climb. The user's home screen is rare — the lock screen is where the product lives.
 
 ### One-line pitch
-> "Let your agents give you a heads up by reading [skill.md](https://headsup.md/skill.md). Yes / No / Wait — without opening a thing."
+> "Let your AI send you notifications with reply options. Yes / No / Wait — without opening a thing." (Agents learn the protocol from [skill.md](https://headsup.md/skill.md).)
 
 ### Non-goals
 - Generic notification SaaS (we have opinions about agents)

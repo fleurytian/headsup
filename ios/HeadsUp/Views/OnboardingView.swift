@@ -65,8 +65,8 @@ struct OnboardingView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     LText(
-                        "让你的 AI\n通过读 skill.md\n来给你提个醒。",
-                        "Let your agents\ngive you a heads up\nby reading skill.md."
+                        "让你的 AI\n给你发送可\n回复选项的通知。",
+                        "Let your AI send you\nnotifications with\nreply options."
                     )
                     .font(.system(size: 28, weight: .heavy, design: .rounded))
                     .foregroundStyle(HU.C.ink)
