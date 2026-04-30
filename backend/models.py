@@ -1,6 +1,7 @@
 import secrets
 from datetime import datetime
 from typing import Optional
+from sqlalchemy import Index
 from sqlmodel import Field, SQLModel, Relationship
 import uuid
 
@@ -163,6 +164,24 @@ class Badge(SQLModel, table=True):
 
 
 class EarnedBadge(SQLModel, table=True):
+    """A badge earned by either a user or an agent.
+
+    Concurrency: two parallel /v1/push requests can both run badge eval,
+    both see "not yet earned", both insert. The unique indexes below let
+    SQL reject the duplicate; the application catches IntegrityError and
+    treats it as "already awarded" (no-op). Without these, the hot push
+    path could double-write rows for the same (badge, owner).
+
+    NULL behavior: SQLite + Postgres both treat NULL as not-equal-to-NULL
+    in unique indexes, so a (badge_id, user_id=NULL) row from an agent
+    badge doesn't conflict with another agent's (badge_id, user_id=NULL).
+    Each index effectively constrains only the rows that have that owner
+    type set — which matches our model.
+    """
+    __table_args__ = (
+        Index("ix_earned_badge_user_unique",  "badge_id", "user_id",  unique=True),
+        Index("ix_earned_badge_agent_unique", "badge_id", "agent_id", unique=True),
+    )
     id: str = Field(default_factory=gen_uuid, primary_key=True)
     badge_id: str = Field(foreign_key="badge.id", index=True)
     user_id: Optional[str] = Field(default=None, foreign_key="appuser.id", index=True)

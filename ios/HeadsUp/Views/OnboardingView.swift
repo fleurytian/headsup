@@ -37,9 +37,10 @@ struct OnboardingView: View {
                     "需要先点一下登录按钮。",
                     "Tap the Sign in button to continue."
                 )
-            case .unknown:
-                fallthrough
-            @unknown default:
+            default:
+                // Includes .unknown, .matchedExcludedCredential (iOS 17.4+),
+                // .credentialImport / .credentialExport (iOS 18+), and any
+                // future cases — fall through to the OS-localized message.
                 break
             }
         }

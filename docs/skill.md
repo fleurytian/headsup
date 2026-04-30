@@ -1,6 +1,6 @@
 # HeadsUp — Interactive Push Skill
 
-`skill_version: 2026-04-29.4`  ·  `last_updated: 2026-04-29`
+`skill_version: 2026-04-30.1`  ·  `last_updated: 2026-04-30`
 
 > Bump `skill_version` when anything below changes substantively. Agents that cache this doc should compare the version and re-fetch on mismatch. The version is the first thing the doc reveals so a `HEAD` or first-line read is enough to decide.
 
@@ -115,6 +115,8 @@ Then push using `"category_id": "pay_or_wait"`. Created/updated categories sync 
 ```http
 POST your-webhook-url
 X-Webhook-Signature: sha256=...   // HMAC-SHA256 of body using your api_key
+X-HeadsUp-Event: reply            // OR badge_earned (see below)
+X-HeadsUp-Agent-ID: uuid
 {
   "message_id":   "uuid",
   "user_key":     "uk_xxx",
@@ -128,6 +130,17 @@ X-Webhook-Signature: sha256=...   // HMAC-SHA256 of body using your api_key
 ```
 
 Retried 5s / 30s / 5min / 30min on non-2xx.
+
+**Dispatch on the `X-HeadsUp-Event` header.** Two event types share this
+endpoint and share the HMAC signing scheme, but the payload shape differs:
+
+| Header `X-HeadsUp-Event` | Payload top-level keys | When |
+|---|---|---|
+| `reply` (default if absent) | `message_id`, `button_id`, `button_label`, `category_id`, `data`, `user_key` | The user tapped a button on one of your pushes. |
+| `badge_earned` | `subtype: "badge_earned"`, `agent_id`, `badge: { id, name_zh, name_en, icon, scope, ... }`, `earned_at` | Your agent earned a badge — for fun / branding. No user action required. |
+
+Always branch on the header (or on `subtype`/`button_id` presence) before
+parsing; assuming "every webhook is a reply" will misroute badge events.
 
 **B. SSE stream (recommended for local agents)** — open one long HTTP connection, get pushed events with no polling:
 
@@ -199,19 +212,55 @@ on_response(event):
 
 ### Onboarding a new user
 
-Generate a single-use authorization link by POST'ing to `/authorize/initiate`:
+**Recommended (JSON-native):**
 
-```bash
-curl -X POST https://headsup.md/authorize/initiate \
-  -d "agent_id=YOUR_AGENT_ID"
-# returns HTML page with embedded headsup://authorize?token=...&agent_id=... deep link
+```http
+POST /v1/agents/auth-links
+X-API-Key: pk_xxx
+→ 201 {
+    "token":      "...",
+    "deep_link":  "headsup://authorize?token=...",
+    "auth_url":   "https://headsup.md/authorize?token=...",
+    "expires_at": "2026-04-30T13:00:00Z",
+    "ttl_seconds": 1800
+  }
 ```
 
-Send the user **either**:
-- the `https://headsup.md/authorize?token=...&agent_id=...` URL — they tap in Safari, "Open in HeadsUp" button takes them through, **or**
-- the `headsup://authorize?token=...&agent_id=...` deep link — they paste in app's "Add Agent" view
+Send the user **either** field:
+- `auth_url` — works in any browser; tap → "Open in HeadsUp" → authorize
+- `deep_link` — paste directly in app's "Add Agent" view
 
-Tokens expire in 30 minutes. Once they tap "Authorize" in the app, you get a webhook OR poll `GET /v1/users` to see new bindings.
+**Polling for completion** (no webhook required):
+
+```http
+GET /v1/agents/auth-links/<token>
+X-API-Key: pk_xxx
+→ 200 { "status": "pending" | "bound" | "expired" | "invalid",
+        "user_key": "uk_..." }      // only when bound
+```
+
+Poll once every few seconds until `status: bound`, then `user_key` is yours.
+
+**Legacy HTML fallback:**
+
+```bash
+curl -X POST https://headsup.md/authorize/initiate -d "agent_id=YOUR_AGENT_ID"
+# returns an HTML page; not recommended for agents
+```
+
+Tokens expire in 30 minutes. Single-use.
+
+### Users may never reply
+
+A user can dismiss your push (swipe left), tap "later" (you receive
+`button_id=later`), or **silently mark-as-read** (you receive nothing). The
+last case is intentional: it's how the user keeps their unread count clean
+without spamming you with stale "later" replies for messages they no longer
+care about.
+
+**Always set a timeout** on `bot.ask()` (or your equivalent) and have a
+fallback for "user didn't respond." Don't block a session forever waiting
+for a reply that may never come.
 
 ## Decision tree
 
@@ -237,10 +286,13 @@ Errors come back as `{"detail": {"code": "...", "message": "...", "solution"?: "
 | `USER_NOT_FOUND` | 404 | `user_key` doesn't exist | Check the key the user gave you |
 | `USER_NOT_BOUND` | 400 | User hasn't authorized this agent | Send them your auth link from `/authorize/initiate` |
 | `USER_NO_DEVICE` | 400 | User signed in but no APNs device yet | Ask them to open the app once |
-| `USER_MUTED` | 429 | User has DND on; push won't deliver until expiry | Retry after `mute_until` |
+| `USER_MUTED` | 429 | User has app-wide DND on; **no agent** can deliver until expiry | Retry after `mute_until`. This is a global "do not disturb" — do not interpret as rejection. |
+| `AGENT_MUTED` | 429 | User has muted **your specific agent** (per-binding mute) | Retry after `mute_until`. Other agents can still reach this user. Treat as a soft signal you're being noisy — consider rate-limiting your own pushes. |
+| `AGENT_QUOTA_EXCEEDED` | 429 | You've used all 100 free-tier pushes this calendar month | Wait until `resets_at` or upgrade. |
 | `INVALID_CATEGORY` | 400 | Unknown `category_id` | Use a built-in or create the category first |
 | `TITLE_TOO_LONG` / `BODY_TOO_LONG` / `SUBTITLE_TOO_LONG` | 400 | Length cap exceeded | See limits below; truncate before sending |
 | `INVALID_IMAGE_URL` | 400 | image_url not http(s) or too long | Provide an absolute URL, ≤ 200 chars |
+| `WEBHOOK_CONFIG_MISSING` | (deprecated) | webhooks are optional now | `webhook_url=null` is fine — use SSE / polling for responses |
 
 ## Limits
 

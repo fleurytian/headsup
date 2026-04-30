@@ -325,6 +325,7 @@ async def push(
 @router.post("/push/{message_id}/retract", status_code=202)
 async def retract_push(
     message_id: str,
+    background_tasks: BackgroundTasks,
     agent: Agent = Depends(get_current_agent),
     session: Session = Depends(get_session),
 ):
@@ -353,8 +354,8 @@ async def retract_push(
     try:
         awarded = badges_svc.on_retract(session, agent_id=agent.id)
         if awarded:
-            asyncio.create_task(
-                badges_svc.celebrate_async(awarded, agent_id=agent.id)
+            background_tasks.add_task(
+                badges_svc.celebrate_async, awarded, agent_id=agent.id
             )
     except Exception:
         pass
@@ -382,6 +383,11 @@ async def broadcast(
     if len(req.user_keys) > 100:
         raise HTTPException(status_code=400, detail="Max 100 users per broadcast")
     _validate_push_content(req)
+    # Quota: count the broadcast as N pushes against the agent's monthly cap.
+    # We pre-check once for the whole batch; the partial-fail path below skips
+    # individual recipients whose binding has issues but every committed
+    # PushMessage still consumes one quota slot.
+    _enforce_monthly_quota(agent.id, session)
     ios_category = _resolve_category(req.category_id, agent.id, session)
 
     results = []
@@ -396,6 +402,15 @@ async def broadcast(
                 body=req.body,
                 subtitle=req.subtitle,
                 image_url=req.image_url,
+                # Bark-parity fields — must mirror the single /push handler so
+                # broadcast-vs-single behaves the same on the device. Missing
+                # these on broadcast was a long-standing inconsistency.
+                level=req.level,
+                sound=req.sound,
+                badge=req.badge,
+                group=req.group,
+                url=req.url,
+                auto_copy=req.auto_copy,
                 category_id=ios_category,
                 data=json.dumps(req.data) if req.data else None,
                 ttl=req.ttl,

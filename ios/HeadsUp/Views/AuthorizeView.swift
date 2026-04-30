@@ -19,6 +19,11 @@ struct AuthorizeView: View {
     @State private var loadingInfo = true
     @State private var error: String?
     @State private var done = false
+    /// Apple App Review Guideline 5.1.2(i) (effective Nov 2025): the user
+    /// must explicitly opt in before their replies are routed to a
+    /// third-party agent. We default this to false; the Authorize button
+    /// stays disabled until the user toggles it on.
+    @State private var consentToThirdParty = false
 
     var body: some View {
         ZStack {
@@ -86,6 +91,48 @@ struct AuthorizeView: View {
                                               en: "Revoke anytime by swiping left on home")
                             }
                         }
+
+                        // Apple Guideline 5.1.2(i): when the app routes user
+                        // data to a third-party (the agent's server, which
+                        // typically runs an LLM), we have to spell that out
+                        // and capture an explicit opt-in. This block is the
+                        // consent capture; the Authorize button is gated on it.
+                        VStack(alignment: .leading, spacing: 12) {
+                            Eyebrow(text: "your reply leaves the app")
+                            LText(
+                                "你点按钮的选项会通过 HeadsUp 发回给「\(agentInfo?.name ?? "这个 Agent")」。这个 Agent 是第三方服务,运行在 HeadsUp 之外,可能用 AI 模型处理你的回应。",
+                                "Tapping a button on this agent's notifications sends your choice — through HeadsUp — to \(agentInfo?.name ?? "this agent"). The agent is a third-party service running outside HeadsUp, and may process your reply with an AI model."
+                            )
+                            .font(HU.small())
+                            .foregroundStyle(HU.C.muted)
+                            .lineSpacing(3)
+
+                            Toggle(isOn: $consentToThirdParty) {
+                                LText(
+                                    "我同意把回复发给这个 Agent。",
+                                    "I agree to send my replies to this agent."
+                                )
+                                .font(HU.body(.medium))
+                                .foregroundStyle(HU.C.ink)
+                            }
+                            .toggleStyle(SwitchToggleStyle(tint: HU.C.ink))
+                            .padding(.top, 4)
+
+                            LText(
+                                "随时可以在主页左滑撤销。撤销后这个 Agent 立即停止收到你的回复。",
+                                "You can revoke this anytime by swiping left on the home screen. The agent stops receiving your replies immediately."
+                            )
+                            .font(HU.small())
+                            .foregroundStyle(HU.C.muted.opacity(0.85))
+                            .lineSpacing(3)
+                        }
+                        .padding(14)
+                        .background(HU.C.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(HU.C.line, lineWidth: 1)
+                        )
                     } else {
                         LText("通知会准时送达。\n你随时可以在主页里撤销它。",
                               "Notifications will arrive on time.\nYou can revoke this agent anytime from home.")
@@ -105,7 +152,17 @@ struct AuthorizeView: View {
                             Task { await confirm() }
                         }
                         .overlay { if working { ProgressView().tint(HU.C.bg) } }
-                        .disabled(working)
+                        .disabled(working || !consentToThirdParty)
+
+                        if !consentToThirdParty {
+                            LText(
+                                "需要先勾上同意,才能授权。",
+                                "Toggle the consent above before authorizing."
+                            )
+                            .font(HU.small())
+                            .foregroundStyle(HU.C.muted)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        }
 
                         GhostButton(title: T("取消", "Cancel")) { deepLink.cancel() }
                             .disabled(working)

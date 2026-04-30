@@ -25,6 +25,11 @@ struct HomeView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
+                            // Setup checklist — only renders when something
+                            // is incomplete. Once everything is green it
+                            // hides entirely so power users aren't nagged.
+                            SetupChecklist(bindingsCount: bindings.count)
+                                .padding(.horizontal, 16)
                             ForEach(status.activeIssues, id: \.self) { issue in
                                 StatusBanner(issue: issue).padding(.horizontal, 16)
                             }
@@ -273,6 +278,110 @@ private struct AgentRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .contentShape(Rectangle())
+    }
+}
+
+/// First-time-success checklist. Shows the four things that must all be
+/// true for the user to actually receive an agent's pings: signed in,
+/// notifications allowed, APNs device token registered, and at least one
+/// agent bound. Each row turns green as it's completed; once the whole
+/// list is green the view returns EmptyView() so it doesn't permanently
+/// occupy the home screen.
+///
+/// Implementation note: signed-in is implicitly true because HomeView only
+/// renders when AuthService has a session, but we display a row for it
+/// anyway so the user sees their own session as part of the picture.
+struct SetupChecklist: View {
+    let bindingsCount: Int
+
+    @EnvironmentObject var auth: AuthService
+    @EnvironmentObject var push: PushService
+    @StateObject private var status = StatusMonitor.shared
+
+    private var signedIn: Bool { auth.session != nil }
+    private var notifyOn: Bool { status.notificationStatus == .authorized || status.notificationStatus == .provisional }
+    private var deviceTokenSet: Bool { push.deviceTokenString?.isEmpty == false }
+    private var hasAnyAgent: Bool { bindingsCount > 0 }
+
+    private var allGood: Bool {
+        signedIn && notifyOn && deviceTokenSet && hasAnyAgent
+    }
+
+    var body: some View {
+        if allGood {
+            // Once everything is green, get out of the user's way entirely.
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: "setup")
+                row(done: signedIn,
+                    zh: "已登录", en: "Signed in",
+                    zhFix: nil, enFix: nil)
+                row(done: notifyOn,
+                    zh: "通知权限已开",
+                    en: "Notifications allowed",
+                    zhFix: "去设置打开",
+                    enFix: "Open Settings",
+                    fix: notifyOn ? nil : openNotifSettings)
+                row(done: deviceTokenSet,
+                    zh: "设备已注册到 APNs",
+                    en: "Device registered with APNs",
+                    zhFix: deviceTokenSet ? nil : "通常几秒后自动完成。如果一直没好,重启 App 一次。",
+                    enFix: deviceTokenSet ? nil : "Usually completes within seconds. Restart the app if it doesn't.",
+                    fix: nil)
+                row(done: hasAnyAgent,
+                    zh: "至少授权一个 agent",
+                    en: "Authorized at least one agent",
+                    zhFix: hasAnyAgent ? nil : "把 headsup.md/skill.md 给你的 AI 让它发授权链接",
+                    enFix: hasAnyAgent ? nil : "Hand headsup.md/skill.md to your AI to get an authorization link",
+                    fix: nil)
+            }
+            .padding(14)
+            .background(HU.C.card)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(HU.C.line, lineWidth: 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func row(done: Bool,
+                     zh: String, en: String,
+                     zhFix: String? = nil, enFix: String? = nil,
+                     fix: (() -> Void)? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                    .font(.callout)
+                    .foregroundStyle(done ? HU.C.ink : HU.C.muted.opacity(0.5))
+                LText(zh, en)
+                    .font(HU.body())
+                    .foregroundStyle(done ? HU.C.ink.opacity(0.55) : HU.C.ink)
+                    .strikethrough(done, color: HU.C.muted)
+                Spacer()
+                if !done, let fix {
+                    Button(action: fix) {
+                        LText(zhFix ?? "", enFix ?? "")
+                            .font(HU.small(.semibold))
+                            .foregroundStyle(HU.C.accent)
+                    }
+                }
+            }
+            if !done, fix == nil, let zhFix, let enFix {
+                LText(zhFix, enFix)
+                    .font(HU.small())
+                    .foregroundStyle(HU.C.muted)
+                    .padding(.leading, 26)
+            }
+        }
+    }
+
+    private func openNotifSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 }
 

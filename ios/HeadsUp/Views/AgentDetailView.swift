@@ -144,8 +144,8 @@ struct AgentDetailView: View {
                     MuteRow(binding: bindingState ?? binding) { newUntil in
                         // Patch the binding in-memory so the row reflects
                         // immediately, even before the next /bindings refresh.
-                        var updated = bindingState ?? binding
-                        let mirror = AgentBinding(
+                        let updated = bindingState ?? binding
+                        bindingState = AgentBinding(
                             agentId: updated.agentId,
                             agentName: updated.agentName,
                             boundAt: updated.boundAt,
@@ -158,7 +158,6 @@ struct AgentDetailView: View {
                             lastMessageTitle: updated.lastMessageTitle,
                             unreadCount: updated.unreadCount
                         )
-                        bindingState = mirror
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
@@ -693,6 +692,15 @@ private struct MuteRow: View {
                 }
             }
             Button(T("取消", "Cancel"), role: .cancel) {}
+        } message: {
+            // Be explicit about what the agent sees — Codex flagged that
+            // users can otherwise assume mute = "queue silently and deliver
+            // later" while agents see the 429 rejection and treat their
+            // task as failed. Aligning both sides removes that mismatch.
+            LText(
+                "静音期间,这个 agent 发的 push 会被立即拒收(返回 429),不是排队稍后送达。它会知道你暂时不接收。其他已授权的 agent 不受影响。",
+                "While muted, this agent's pushes are rejected immediately (429) — not queued for later. The agent knows you're not accepting messages right now. Other authorized agents are unaffected."
+            )
         }
     }
 

@@ -215,13 +215,21 @@ def _award(session: Session, badge_id: str, *, user_id: Optional[str] = None,
            agent_id: Optional[str] = None) -> bool:
     """Grant the badge if not already held. Returns True if newly awarded.
 
-    Side effect: schedules a celebration notification (silent for now;
-    actual APNs push fired by callers via _enqueue_celebration).
+    Race-safe: the cheap pre-check + insert is the happy path, but if two
+    parallel requests slip past the check the unique index on
+    EarnedBadge (see models.py) catches the duplicate as IntegrityError —
+    we rollback and report "already had it" instead of letting the
+    exception bubble into the caller's hot path.
     """
+    from sqlalchemy.exc import IntegrityError
     if _already_has(session, badge_id, user_id=user_id, agent_id=agent_id):
         return False
     session.add(EarnedBadge(badge_id=badge_id, user_id=user_id, agent_id=agent_id))
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        return False
     return True
 
 

@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from auth import create_access_token, hash_password, verify_password
+from config import settings
 from database import get_session
 from deps import get_current_agent
 from models import (
@@ -10,10 +12,13 @@ from models import (
     AgentLoginRequest,
     AgentRegisterRequest,
     AgentResponse,
+    AuthorizationRequest,
     Badge as BadgeRow,
     EarnedBadge,
     gen_api_key,
 )
+
+AUTH_TOKEN_TTL_MINUTES = 30
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -116,6 +121,76 @@ def regenerate_key(
     session.commit()
     session.refresh(agent)
     return agent
+
+
+@router.post("/auth-links", status_code=201)
+def create_auth_link(
+    session: Session = Depends(get_session),
+    agent: Agent = Depends(get_current_agent),
+):
+    """JSON-native onboarding helper for agents.
+
+    Returns the deep link, the public web URL, and the raw token in one
+    JSON payload — agents don't have to scrape the HTML page returned by
+    /authorize/initiate, parse out the deep link, or guess the URL shape.
+
+    Pattern (from skill.md):
+        bot.create_auth_link() -> {"auth_url": "...", ...}
+        send to user
+        poll GET /v1/users until binding appears, OR receive webhook
+
+    Token expires in 30 minutes. Single-use. Multiple in-flight tokens
+    per agent are fine — each one is independent.
+    """
+    auth_req = AuthorizationRequest(
+        agent_id=agent.id,
+        expires_at=datetime.utcnow() + timedelta(minutes=AUTH_TOKEN_TTL_MINUTES),
+    )
+    session.add(auth_req)
+    session.commit()
+    session.refresh(auth_req)
+    base = settings.base_url.rstrip("/")
+    return {
+        "token":      auth_req.token,
+        "deep_link":  f"headsup://authorize?token={auth_req.token}",
+        "auth_url":   f"{base}/authorize?token={auth_req.token}",
+        "expires_at": auth_req.expires_at.isoformat() + "Z",
+        "ttl_seconds": AUTH_TOKEN_TTL_MINUTES * 60,
+    }
+
+
+@router.get("/auth-links/{token}")
+def get_auth_link_status(
+    token: str,
+    session: Session = Depends(get_session),
+    agent: Agent = Depends(get_current_agent),
+):
+    """Check whether a previously-issued auth link has been used.
+
+    Returns:
+      { "status": "pending" | "bound" | "expired" | "invalid",
+        "user_key": "uk_..." }      ← only when status == "bound"
+
+    Lets agents poll instead of standing up a webhook for the auth flow.
+    """
+    auth_req = session.exec(
+        select(AuthorizationRequest).where(
+            AuthorizationRequest.token == token,
+            AuthorizationRequest.agent_id == agent.id,
+        )
+    ).first()
+    if not auth_req:
+        return {"status": "invalid"}
+    if auth_req.expires_at < datetime.utcnow() and not auth_req.used:
+        return {"status": "expired"}
+    if not auth_req.used or not auth_req.user_id:
+        return {"status": "pending"}
+    from models import AppUser
+    user = session.get(AppUser, auth_req.user_id)
+    return {
+        "status": "bound",
+        "user_key": user.user_key if user else None,
+    }
 
 
 @router.get("/me/badges")

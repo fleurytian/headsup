@@ -54,13 +54,45 @@ def migrate_add_missing_columns() -> list[str]:
     return executed
 
 
+def migrate_add_missing_indexes() -> list[str]:
+    """Create any Index() in the model metadata that's missing in the live DB.
+
+    `create_all` only creates indexes when it creates the parent table, so
+    indexes added later (e.g. EarnedBadge unique constraints) need explicit
+    creation. `Index.create(..., checkfirst=True)` is a no-op if the index
+    already exists.
+    """
+    created: list[str] = []
+    insp = inspect(engine)
+    for table in SQLModel.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        existing = {ix["name"] for ix in insp.get_indexes(table.name)}
+        for index in table.indexes:
+            if index.name in existing:
+                continue
+            try:
+                index.create(bind=engine, checkfirst=True)
+                created.append(f"CREATE INDEX {index.name} ON {table.name}")
+            except Exception as e:
+                # Most likely cause: existing duplicate rows preventing a
+                # UNIQUE index from being created. Don't crash the boot —
+                # log and continue; ops can dedupe + retry.
+                import logging
+                logging.getLogger(__name__).warning(
+                    "skipping index %s: %s", index.name, e
+                )
+    return created
+
+
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
-    added = migrate_add_missing_columns()
-    if added:
+    added_cols = migrate_add_missing_columns()
+    added_idx  = migrate_add_missing_indexes()
+    if added_cols or added_idx:
         import logging
         log = logging.getLogger(__name__)
-        for ddl in added:
+        for ddl in added_cols + added_idx:
             log.info("migration: %s", ddl)
 
 

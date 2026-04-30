@@ -135,6 +135,7 @@ def register_device(
 @router.post("/authorize/confirm")
 def confirm_authorization(
     req: AuthConfirmRequest,
+    background_tasks: BackgroundTasks,
     user: AppUser = Depends(get_authed_user),
     session: Session = Depends(get_session),
 ):
@@ -177,9 +178,7 @@ def confirm_authorization(
     try:
         awarded = badges_svc.on_agent_authorized(session, user_id=user.id)
         if awarded:
-            from fastapi import BackgroundTasks  # avoid top-import; this dep already imported
-            # We don't have BackgroundTasks here without changing signature; fall back to async fire-and-forget.
-            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
+            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
     except Exception:
         pass
 
@@ -525,6 +524,7 @@ def mark_all_read(
 @router.delete("/bindings/{agent_id}", status_code=204)
 def revoke_binding(
     agent_id: str,
+    background_tasks: BackgroundTasks,
     user: AppUser = Depends(get_authed_user),
     session: Session = Depends(get_session),
 ):
@@ -546,7 +546,7 @@ def revoke_binding(
     try:
         awarded = badges_svc.on_agent_revoked(session, user_id=user.id)
         if awarded:
-            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
+            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
     except Exception:
         pass
 
@@ -650,6 +650,7 @@ def public_auth_request(token: str, session: Session = Depends(get_session)):
 @router.post("/mute")
 def set_mute(
     req: MuteRequest,
+    background_tasks: BackgroundTasks,
     user: AppUser = Depends(get_authed_user),
     session: Session = Depends(get_session),
 ):
@@ -664,7 +665,7 @@ def set_mute(
         try:
             awarded = badges_svc.on_user_action(session, user_id=user.id, action="mute_first")
             if awarded:
-                asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
+                background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
         except Exception:
             pass
 
@@ -878,24 +879,32 @@ def my_badges(user: AppUser = Depends(get_authed_user), session: Session = Depen
 
 
 @router.post("/me/badges/curious-tap", status_code=204)
-def curious_tap(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+def curious_tap(
+    background_tasks: BackgroundTasks,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
     """Trigger the meta 'Curious Cat' badge — the only one that earns by being
     looked at. iOS calls this when the user taps a locked badge."""
     try:
         awarded = badges_svc.on_user_action(session, user_id=user.id, action="curious_tap")
         if awarded:
-            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
+            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
     except Exception:
         pass
 
 
 @router.post("/me/cold-feet", status_code=204)
-def cold_feet(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
+def cold_feet(
+    background_tasks: BackgroundTasks,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
     """User opened the Delete Account dialog and chose Cancel."""
     try:
         awarded = badges_svc.on_user_action(session, user_id=user.id, action="cold_feet")
         if awarded:
-            asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
+            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
     except Exception:
         pass
     events.safe_log(
