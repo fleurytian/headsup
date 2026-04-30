@@ -109,8 +109,8 @@ struct SettingsView: View {
                                     SettingsKeyValue(
                                         key: copied ? T("已复制 user key", "user key copied") : "user key",
                                         value: session.userKey,
-                                        mono: true,
-                                        valueColor: copied ? HU.C.accent : HU.C.muted
+                                        valueColor: copied ? HU.C.accent : HU.C.muted,
+                                        mono: true
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -137,8 +137,8 @@ struct SettingsView: View {
                                             ? T("已复制 device token", "device token copied")
                                             : T("设备 token (APNs)", "device token (APNs)"),
                                         value: String(token.prefix(12)) + "…",
-                                        mono: true,
-                                        valueColor: deviceTokenCopied ? HU.C.accent : HU.C.muted
+                                        valueColor: deviceTokenCopied ? HU.C.accent : HU.C.muted,
+                                        mono: true
                                     )
                                 }
                                 .buttonStyle(.plain)
