@@ -233,29 +233,19 @@ private struct AgentRow: View {
         )
     }
 
+    @StateObject private var overrides = AgentOverrides.shared
+
+    private var accent: Color { overrides.displayAccent(for: binding) }
+    private var displayName: String { overrides.displayName(for: binding) }
+
     var body: some View {
         HStack(spacing: 14) {
-            // Real logo when the agent set one; otherwise initial-on-accent.
-            ZStack {
-                Circle().fill(HU.C.accent.opacity(0.12)).frame(width: 36, height: 36)
-                if let urlStr = binding.agentLogoUrl, let url = URL(string: urlStr) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img.resizable().aspectRatio(contentMode: .fill)
-                                .frame(width: 36, height: 36).clipShape(Circle())
-                        default:
-                            Text(String(binding.agentName.prefix(1)).uppercased())
-                                .font(HU.title(.heavy)).foregroundStyle(HU.C.accent)
-                        }
-                    }
-                } else {
-                    Text(String(binding.agentName.prefix(1)).uppercased())
-                        .font(HU.title(.heavy)).foregroundStyle(HU.C.accent)
-                }
-            }
+            AgentAvatar(name: displayName,
+                        logoUrl: binding.agentLogoUrl,
+                        accent: accent,
+                        size: 36)
             VStack(alignment: .leading, spacing: 2) {
-                Text(binding.agentName).font(HU.body(.medium)).foregroundStyle(HU.C.ink)
+                Text(displayName).font(HU.body(.medium)).foregroundStyle(HU.C.ink)
                 if let title = binding.lastMessageTitle, !title.isEmpty {
                     Text(title)
                         .font(HU.small())
@@ -266,12 +256,17 @@ private struct AgentRow: View {
                 Text(subtitle).font(HU.small()).foregroundStyle(HU.C.muted)
             }
             Spacer()
+            if binding.isMuted {
+                Image(systemName: "bell.slash.fill")
+                    .font(.caption2)
+                    .foregroundStyle(HU.C.muted)
+            }
             if let unread = binding.unreadCount, unread > 0 {
                 Text(unread > 99 ? "99+" : "\(unread)")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(HU.C.bg)
                     .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Capsule().fill(HU.C.accent))
+                    .background(Capsule().fill(accent))
             }
             Image(systemName: "chevron.right").font(.caption.weight(.medium)).foregroundStyle(HU.C.muted.opacity(0.7))
         }
@@ -464,7 +459,7 @@ struct EmptyAgentsView: View {
                     .lineSpacing(4)
                     .padding(.horizontal, 32)
                 } else {
-                    LText("等一个 heads up。", "Get a heads up.")
+                    LText("等一个 Headsup。", "Gets a Headsup.")
                         .font(.system(size: 28, weight: .heavy, design: .rounded))
                         .foregroundStyle(HU.C.ink)
                         .padding(.horizontal, 32)

@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     apns_production: bool = False
     base_url: str = "http://localhost:8000"
     app_name: str = "HeadsUp"
+    # Per-agent monthly push quota. Counter resets on the 1st of each calendar
+    # month UTC. Override via env (FREE_TIER_MONTHLY_PUSHES=1000 etc.).
+    free_tier_monthly_pushes: int = 100
+    # Token required to access /admin dashboards. If empty, /admin returns 401.
+    # Set via env: ADMIN_TOKEN=<long random string>.
+    admin_token: str = ""
 
     class Config:
         env_file = ".env"

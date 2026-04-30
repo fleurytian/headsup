@@ -50,6 +50,45 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         } else {
             application.applicationIconBadgeNumber = 0
         }
+        // Telemetry beacon — cheap, fire-and-forget, never blocks the user.
+        Task { await Self.pingAppOpened() }
+        // Drain any messages the NSE wrote while we were backgrounded — the
+        // app's own /history fetch will round-trip them anyway, but waking
+        // the in-memory feed first feels instant.
+        Self.flushSharedSnapshots()
+    }
+
+    /// Pull the shared App-Group snapshots into the in-process feed and
+    /// then prune them. Safe to call when the App Group isn't configured;
+    /// `SharedMessageStore` is a no-op in that case.
+    static func flushSharedSnapshots() {
+        let snaps = SharedMessageStore.shared.readAll()
+        guard !snaps.isEmpty else { return }
+        // The on-screen history pulls from the server's /history endpoint;
+        // we just nudge it to refresh so the new rows appear without
+        // waiting for the next foreground tick.
+        NotificationCenter.default.post(name: .headsupHistoryChanged, object: nil)
+        // Keep only the last hour — older ones are definitely already in
+        // the server's /history payload, so the shared store doesn't need
+        // to retain them.
+        SharedMessageStore.shared.pruneBefore(Date().addingTimeInterval(-3600))
+    }
+
+    /// One-line beacon so the backend can compute DAU/MAU without us
+    /// needing a separate analytics SDK.
+    @MainActor
+    static func pingAppOpened() async {
+        guard let session = AuthService.shared.session else { return }
+        struct Empty: Codable {}
+        do {
+            let _: Empty = try await APIClient.shared.post(
+                "/v1/app/me/ping",
+                body: Empty(),
+                sessionToken: session.sessionToken
+            )
+        } catch {
+            // Best-effort — silently drop. Telemetry must never harass the user.
+        }
     }
 
     func application(

@@ -15,21 +15,30 @@ struct AgentBinding: Codable, Identifiable {
     let agentName: String
     let boundAt: Date
     let agentLogoUrl: String?
+    let agentAccentColor: String?
     let agentDescription: String?
     let agentType: String?
+    let muteUntil: Date?
     let lastMessageAt: Date?
     let lastMessageTitle: String?
     let unreadCount: Int?
 
     var id: String { agentId }
 
+    var isMuted: Bool {
+        guard let until = muteUntil else { return false }
+        return until > Date()
+    }
+
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
         case agentName = "agent_name"
         case boundAt = "bound_at"
         case agentLogoUrl = "agent_logo_url"
+        case agentAccentColor = "agent_accent_color"
         case agentDescription = "agent_description"
         case agentType = "agent_type"
+        case muteUntil = "mute_until"
         case lastMessageAt = "last_message_at"
         case lastMessageTitle = "last_message_title"
         case unreadCount = "unread_count"
@@ -44,6 +53,7 @@ struct AppleSignInRequest: Codable {
     let email: String?
     let fullName: String?
     let apnsDeviceToken: String?
+    let nonce: String?
 
     enum CodingKeys: String, CodingKey {
         case identityToken = "identity_token"
@@ -51,6 +61,7 @@ struct AppleSignInRequest: Codable {
         case email
         case fullName = "full_name"
         case apnsDeviceToken = "apns_device_token"
+        case nonce
     }
 }
 

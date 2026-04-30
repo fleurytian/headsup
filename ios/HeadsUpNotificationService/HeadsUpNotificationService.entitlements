@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Same App Group as the main app, so the NSE can write incoming
+         messages into the shared container for the host app + Widget to
+         pick up next time they run. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.md.headsup</string>
+    </array>
+</dict>
+</plist>

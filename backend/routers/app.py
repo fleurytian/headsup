@@ -30,7 +30,8 @@ from models import (
     PushMessage,
     WebhookDelivery,
 )
-from services import event_bus, badges as badges_svc
+from services import event_bus, badges as badges_svc, events
+from services.agent_branding import resolve_accent
 from services.apple_signin import verify_identity_token
 from services.webhook import deliver_webhook
 from models import Badge as BadgeRow, EarnedBadge
@@ -66,9 +67,20 @@ BUTTON_LABELS = {
 
 @router.post("/sign-in-apple", response_model=AppleSignInResponse)
 async def sign_in_apple(req: AppleSignInRequest, session: Session = Depends(get_session)):
-    """Verifies an Apple Sign In identity token and returns a session token."""
+    """Verifies an Apple Sign In identity token and returns a session token.
+
+    Accepts an optional `nonce` (the raw client-side string the iOS app
+    used as `ASAuthorizationAppleIDRequest.nonce`'s SHA-256 hex digest).
+    When supplied, the server recomputes the digest and matches it to the
+    token's `nonce` claim — so an intercepted identity_token can't be
+    replayed by a third party that doesn't know the original nonce.
+    Older clients that don't send a nonce still work for backward compat
+    until we cut a release that requires it.
+    """
     try:
-        claims = await verify_identity_token(req.identity_token)
+        claims = await verify_identity_token(
+            req.identity_token, raw_nonce=req.nonce
+        )
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Apple token: {e}")
 
@@ -171,6 +183,14 @@ def confirm_authorization(
     except Exception:
         pass
 
+    events.safe_log(
+        session,
+        kind="agent_authorized",
+        actor_kind="user",
+        actor_id=user.id,
+        meta={"agent_id": auth_req.agent_id},
+    )
+
     return {"status": "bound", "agent_id": auth_req.agent_id}
 
 
@@ -225,6 +245,19 @@ async def report_action(
             background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
     except Exception:
         pass
+
+    events.safe_log(
+        session,
+        kind="push_replied",
+        actor_kind="user",
+        actor_id=user.id,
+        meta={
+            "message_id": message.id,
+            "agent_id": message.agent_id,
+            "button_id": req.button_id,
+            "category_id": message.category_id,
+        },
+    )
 
     # Parse `data` once before publishing — webhook + /v1/responses both
     # surface it as a dict, so SSE must too. Was a string before and broke
@@ -300,9 +333,11 @@ def get_bindings(
             "agent_id":         agent.id,
             "agent_name":       agent.name,
             "agent_logo_url":   agent.logo_url,
+            "agent_accent_color": resolve_accent(agent),
             "agent_description": agent.description,
             "agent_type":       agent.agent_type,
             "bound_at":         b.bound_at,
+            "mute_until":       b.mute_until,
             "last_message_at":  latest.created_at if latest else None,
             "last_message_title": latest.title if latest else None,
             "unread_count":     unread,
@@ -384,6 +419,109 @@ async def defer_all_unread(
     return {"deferred": deferred}
 
 
+@router.post("/bindings/{agent_id}/mute")
+def mute_binding(
+    agent_id: str,
+    req: MuteRequest,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Silence one specific agent for N minutes (or unmute).
+
+    Distinct from POST /mute, which silences the whole app for the user.
+    Per-binding mute lets the user keep getting pushes from agents they
+    care about while shutting up a chatty one.
+    """
+    binding = session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.user_id == user.id,
+            AgentUserBinding.agent_id == agent_id,
+            AgentUserBinding.status == "active",
+        )
+    ).first()
+    if not binding:
+        raise HTTPException(404, "Binding not found")
+
+    if req.minutes is None or req.minutes <= 0:
+        binding.mute_until = None
+    else:
+        binding.mute_until = datetime.utcnow() + timedelta(minutes=req.minutes)
+    session.add(binding)
+    session.commit()
+
+    events.safe_log(
+        session,
+        kind="agent_muted_per_binding" if binding.mute_until else "agent_unmuted_per_binding",
+        actor_kind="user",
+        actor_id=user.id,
+        meta={"agent_id": agent_id, "minutes": req.minutes},
+    )
+    return {"agent_id": agent_id, "mute_until": binding.mute_until}
+
+
+@router.post("/bindings/{agent_id}/mark-all-read")
+def mark_all_read(
+    agent_id: str,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Silent 'mark as read' for every unanswered push from this agent.
+
+    Distinct from /defer-all-unread: this does NOT fire a webhook to the agent
+    — it's purely a local cleanup so the user's unread badge clears without
+    spamming the agent with N×'later' replies for stale prompts they no longer
+    care about.
+
+    Implementation: insert WebhookDelivery rows with button_id="_read" and
+    status="suppressed" so the unread query (which counts messages without
+    a delivery row) returns zero, but the webhook worker skips them.
+    """
+    binding = session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.user_id == user.id,
+            AgentUserBinding.agent_id == agent_id,
+            AgentUserBinding.status == "active",
+        )
+    ).first()
+    if not binding:
+        raise HTTPException(404, "Binding not found")
+
+    messages = session.exec(
+        select(PushMessage).where(
+            PushMessage.agent_id == agent_id,
+            PushMessage.user_id == user.id,
+            PushMessage.category_id != "info_only",
+        )
+    ).all()
+    marked = 0
+    for m in messages:
+        already = session.exec(
+            select(WebhookDelivery).where(WebhookDelivery.message_id == m.id).limit(1)
+        ).first()
+        if already:
+            continue
+        delivery = WebhookDelivery(
+            message_id=m.id,
+            agent_id=agent_id,
+            user_id=user.id,
+            user_key=user.user_key,
+            button_id="_read",
+            button_label="已读",
+            category_id=m.category_id,
+            data=m.data,
+            status="suppressed",
+        )
+        session.add(delivery)
+        marked += 1
+    session.commit()
+    events.safe_log(
+        session, kind="bulk_marked_read",
+        actor_kind="user", actor_id=user.id,
+        meta={"agent_id": agent_id, "count": marked},
+    )
+    return {"marked": marked}
+
+
 @router.delete("/bindings/{agent_id}", status_code=204)
 def revoke_binding(
     agent_id: str,
@@ -411,6 +549,14 @@ def revoke_binding(
             asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
     except Exception:
         pass
+
+    events.safe_log(
+        session,
+        kind="agent_revoked",
+        actor_kind="user",
+        actor_id=user.id,
+        meta={"agent_id": agent_id},
+    )
 
 
 @router.get("/categories", response_model=list[AppCategoryResponse])
@@ -454,6 +600,7 @@ def public_agent_info(agent_id: str, session: Session = Depends(get_session)):
         name=agent.name,
         description=agent.description,
         logo_url=agent.logo_url,
+        accent_color=resolve_accent(agent),
         agent_type=agent.agent_type,
         created_at=agent.created_at,
     )
@@ -490,6 +637,7 @@ def public_auth_request(token: str, session: Session = Depends(get_session)):
             name=agent.name,
             description=agent.description,
             logo_url=agent.logo_url,
+            accent_color=resolve_accent(agent),
             agent_type=agent.agent_type,
             created_at=agent.created_at,
         ),
@@ -519,6 +667,14 @@ def set_mute(
                 asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
         except Exception:
             pass
+
+    events.safe_log(
+        session,
+        kind="agent_muted" if req.minutes and req.minutes > 0 else "agent_unmuted",
+        actor_kind="user",
+        actor_id=user.id,
+        meta={"minutes": req.minutes},
+    )
 
     return {"mute_until": user.mute_until}
 
@@ -598,6 +754,8 @@ def my_history(
             message_id=m.id,
             agent_id=m.agent_id,
             agent_name=agent.name if agent else "?",
+            agent_logo_url=agent.logo_url if agent else None,
+            agent_accent_color=resolve_accent(agent) if agent else None,
             title=m.title,
             body=m.body,
             category_id=m.category_id,
@@ -740,6 +898,23 @@ def cold_feet(user: AppUser = Depends(get_authed_user), session: Session = Depen
             asyncio.create_task(badges_svc.celebrate_async(awarded, user_id=user.id))
     except Exception:
         pass
+    events.safe_log(
+        session, kind="delete_account_canceled",
+        actor_kind="user", actor_id=user.id,
+    )
+
+
+@router.post("/me/ping", status_code=204)
+def app_opened_ping(
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Lightweight beacon iOS sends on app foreground / cold start.
+    Used to compute DAU/MAU and "did we lose them" cohorts."""
+    events.safe_log(
+        session, kind="app_opened",
+        actor_kind="user", actor_id=user.id,
+    )
 
 
 @router.get("/me/diagnose")

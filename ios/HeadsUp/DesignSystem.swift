@@ -94,8 +94,8 @@ struct PrimaryButton: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .foregroundStyle(isEnabled ? HU.C.bg : HU.C.muted)
-            .background(Capsule().fill(isEnabled ? HU.C.ink : HU.C.line))
+            .foregroundStyle(HU.C.bg)
+            .background(Capsule().fill(isEnabled ? HU.C.ink : HU.C.muted))
         }
         .buttonStyle(.plain)
         .animation(.easeOut(duration: 0.12), value: isEnabled)
@@ -135,5 +135,99 @@ struct HairRule: View {
                 Rectangle().fill(HU.C.line).frame(height: 1)
             }
         }
+    }
+}
+
+// ── Hex color parsing ───────────────────────────────────────────────────────
+
+extension Color {
+    /// "#RRGGBB" or "#RGB" or "RRGGBB". Returns nil for unparseable input.
+    init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        if s.count == 3 {
+            s = s.map { "\($0)\($0)" }.joined()
+        }
+        guard s.count == 6, let v = UInt64(s, radix: 16) else { return nil }
+        self.init(
+            red:   Double((v >> 16) & 0xFF) / 255.0,
+            green: Double((v >>  8) & 0xFF) / 255.0,
+            blue:  Double( v        & 0xFF) / 255.0
+        )
+    }
+}
+
+// ── Agent avatar + branding fallback ────────────────────────────────────────
+
+/// Defaults for agents whose `accent_color` was never explicitly set.
+/// Mirrors backend/services/agent_branding.py — keep both lists in sync if
+/// you add a known name. iOS uses this only when the server-provided color is
+/// missing (older detail-view payloads).
+enum AgentBranding {
+    private static let known: [(String, String)] = [
+        ("claude code", "#D97757"),
+        ("claude",      "#D97757"),
+        ("codex",       "#10A37F"),
+        ("hermes",      "#5B8DEE"),
+        ("openclaw",    "#E8A33D"),
+        ("gpt",         "#10A37F"),
+        ("gemini",      "#4C8DF6"),
+        ("kimi",        "#7C5CFC"),
+    ]
+    private static let palette: [Color] = [
+        HU.C.accent,
+        Color(hex: "#D97757")!,
+        Color(hex: "#10A37F")!,
+        Color(hex: "#5B8DEE")!,
+        Color(hex: "#E8A33D")!,
+        Color(hex: "#7C5CFC")!,
+        Color(hex: "#C04E7E")!,
+        Color(hex: "#3FA9A1")!,
+    ]
+
+    static func fallback(for name: String?) -> Color {
+        guard let raw = name?.lowercased(), !raw.isEmpty else { return palette[0] }
+        for (key, hex) in known {
+            if raw.contains(key), let c = Color(hex: hex) { return c }
+        }
+        var hash = 5381
+        for byte in raw.utf8 { hash = ((hash &<< 5) &+ hash) &+ Int(byte) }
+        return palette[abs(hash) % palette.count]
+    }
+}
+
+/// Round avatar that prefers `logoUrl`, else falls back to a tinted circle
+/// with the first letter of the agent's name.
+struct AgentAvatar: View {
+    let name: String
+    let logoUrl: String?
+    let accent: Color
+    var size: CGFloat = 32
+
+    var body: some View {
+        ZStack {
+            Circle().fill(accent.opacity(0.15))
+            if let s = logoUrl, let url = URL(string: s) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().aspectRatio(contentMode: .fill)
+                    default:
+                        initial
+                    }
+                }
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+            } else {
+                initial
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    private var initial: some View {
+        Text(String(name.prefix(1)).uppercased())
+            .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
+            .foregroundStyle(accent)
     }
 }

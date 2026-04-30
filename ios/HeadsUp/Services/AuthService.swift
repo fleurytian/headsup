@@ -1,5 +1,6 @@
 import Foundation
 import AuthenticationServices
+import CryptoKit
 
 @MainActor
 final class AuthService: NSObject, ObservableObject {
@@ -10,6 +11,47 @@ final class AuthService: NSObject, ObservableObject {
     @Published var lastError: String?
 
     private let storageKey = "headsup.userSession"
+
+    /// Raw nonce we generated for the most recent Apple-Sign-In request.
+    /// We stash it here between `prepareRequest()` and `handleAppleSignIn()`
+    /// so the backend can re-derive the SHA-256 we sent to Apple.
+    private(set) var pendingNonce: String?
+
+    /// Generate a fresh random nonce and remember the raw value. Apply the
+    /// SHA-256 hex digest to the request — that's what Apple expects in the
+    /// `nonce` field, and what the identity_token will echo back as a claim.
+    /// Stops a leaked identity_token from being replayable by anyone who
+    /// doesn't know the original raw nonce.
+    func prepareRequest(_ request: ASAuthorizationAppleIDRequest) {
+        let raw = Self.randomNonce()
+        pendingNonce = raw
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = Self.sha256Hex(raw)
+    }
+
+    private static func randomNonce(length: Int = 32) -> String {
+        precondition(length > 0)
+        let charset: [Character] = Array(
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._"
+        )
+        var result = ""
+        var remaining = length
+        while remaining > 0 {
+            var random: UInt8 = 0
+            let status = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
+            if status != errSecSuccess { continue }
+            if random < charset.count {
+                result.append(charset[Int(random)])
+                remaining -= 1
+            }
+        }
+        return result
+    }
+
+    private static func sha256Hex(_ input: String) -> String {
+        let digest = SHA256.hash(data: Data(input.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
 
     override init() {
         super.init()
@@ -47,12 +89,16 @@ final class AuthService: NSObject, ObservableObject {
         let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
             .compactMap { $0 }.joined(separator: " ")
 
+        let nonce = pendingNonce
+        pendingNonce = nil
+
         let request = AppleSignInRequest(
             identityToken: token,
             authorizationCode: code,
             email: credential.email,
             fullName: fullName.isEmpty ? nil : fullName,
-            apnsDeviceToken: PushService.shared.deviceTokenString
+            apnsDeviceToken: PushService.shared.deviceTokenString,
+            nonce: nonce
         )
 
         isSigningIn = true

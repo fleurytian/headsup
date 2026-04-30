@@ -188,12 +188,31 @@ Full list in `services/badges.py:BUILTIN_BADGES`.
 
 ## 8. App layout (current)
 
+### Why open the app at all?
+
+Most days a HeadsUp user shouldn't *need* to. Notifications are the product. The
+app exists for three discrete reasons, in priority order:
+
+- **P0 — react to a stuck push.** A notification got dismissed, the user ignored
+  it, the lock-screen actions misfired, or they want to back-fill a reply. Goal:
+  see what's unread per agent, fix it, get out.
+- **P1 — manage who can reach me.** Add a new agent (paste an auth link),
+  silence a noisy one, revoke one entirely. Lower-frequency than P0 but more
+  consequential.
+- **P2 — feel something.** Badges, stats, "you've answered 80% of your pushes
+  this week." Pure delight; never blocking.
+
 ### Home
-1. Status banners (notifications denied / offline / cellular off / not-asked)
-2. Clipboard auto-detect card (when `headsup://authorize?...` sits in clipboard)
-3. Header: "agents · N" left + today summary right ("今日 12 · 已回 8 · 待回 1")
-4. Agent list rows: avatar, name, last push title (truncated), "active 5m ago", unread chip
-5. Pull-to-refresh
+1. **(P0)** Status banners (notifications denied / offline / not-asked) — the app is broken until these clear; show them on top so the user can't miss them.
+2. **(P0)** Clipboard auto-detect card — surfaces a pending `headsup://authorize?...` so onboarding is one tap from anywhere.
+3. **(P2)** Eyebrow + today summary right — `agents · N` and `今日 12 · 已回 8 · 待回 1`. Small, one line. Not a hero.
+4. **(P0/P1)** Agent list rows — avatar (server-tinted), name, last push title (truncated), "active 5m ago", unread chip + 🔕 mute chip. The unread chip is the thing the user came for; tapping the row drops them into Detail where they can reply, defer-all, mark-all-read, or mute.
+5. Pull-to-refresh.
+
+### Why no big "compose" CTA?
+The user never *initiates* a push from this app. The agents do. So Home is a
+status board, not a launchpad. Adding a hero compose button would lie about the
+product.
 
 ### Empty state — first-time
 Long onboarding: instruction box (paste-and-go for any AI), 3 step lines, Add Agent button.
@@ -249,6 +268,35 @@ Cross-agent push timeline; shows agent name eyebrow + INFO chip for info_only. L
 - **Apple guideline 2.5.2** (vibe-coding crackdown): HeadsUp itself does NOT run AI, NOT execute downloaded code, NOT allow users to build apps inside it. Reviewer note in `~/Desktop/headsup-app-store-draft.md` is explicit.
 
 ---
+
+## 11.5. Apple App Review prep (Nov 2025 guideline update)
+
+Apple updated **Guideline 5.1.2(i)** on 2025-11-13 to require explicit user
+consent and disclosure when an app shares personal data with third-party AI
+(LLMs etc.). HeadsUp is a delivery channel, not an AI app, but every reply the
+user sends is being routed to a third-party agent that runs an LLM, so the
+rule applies. The framing is "interactive notifications routed to user-authorized
+agents," not "AI assistant."
+
+Before App Store submission:
+
+1. **Per-agent consent screen** when registering an agent: name + "your replies
+   will be sent to this third party" + opt-in toggle. Mirror identical text in
+   the privacy policy and the App Privacy questionnaire.
+2. **Revocable in Settings** — already done (swipe-left revoke + per-agent mute).
+   5.1.2(i) requires "ongoing control."
+3. **App Store description**: avoid "AI assistant" / "powered by GPT" in title
+   or subtitle; that invites Guideline 4.2 (Minimum Functionality) thin-wrapper
+   scrutiny. Use "Interactive notifications" framing.
+4. **Don't gate functionality on push permission** (5.1.2 explicit prohibition):
+   the home screen still has to be useful even if the user denied notifications.
+   StatusBanner is the pattern — done.
+5. Submission must use Xcode 26 / iOS 26 SDK (mandatory from April 2026).
+6. **Communication Notifications entitlement review note**: state explicitly that
+   replies are user-initiated and authorized per-agent, not autonomous AI output.
+
+Sources: Apple developer news 2025-11-13, App Review Guidelines 5.1.2(i) +
+4.7 + 4.2.
 
 ## 11. Outstanding (top of the list)
 

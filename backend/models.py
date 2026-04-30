@@ -71,6 +71,10 @@ class AgentUserBinding(SQLModel, table=True):
     user_id: str = Field(foreign_key="appuser.id", index=True)
     status: str = Field(default="active")  # active | revoked
     bound_at: datetime = Field(default_factory=datetime.utcnow)
+    # Per-binding silence — the user can mute one agent without muting the
+    # entire app. If set + future, /v1/push from this agent returns 429
+    # AGENT_MUTED. None = not muted.
+    mute_until: Optional[datetime] = None
 
     agent: Optional[Agent] = Relationship(back_populates="bindings")
     user: Optional[AppUser] = Relationship(back_populates="bindings")
@@ -193,6 +197,7 @@ class AgentRegisterRequest(SQLModel):
     description: Optional[str] = None
     logo_url: Optional[str] = None
     agent_type: Optional[str] = None  # one of AGENT_TYPES keys
+    accent_color: Optional[str] = None    # hex like "#D97757"
 
 
 class AgentLoginRequest(SQLModel):
@@ -209,6 +214,7 @@ class AgentResponse(SQLModel):
     description: Optional[str] = None
     logo_url: Optional[str] = None
     agent_type: Optional[str] = None
+    accent_color: Optional[str] = None
     created_at: datetime
 
 
@@ -299,6 +305,7 @@ class AppleSignInRequest(SQLModel):
     email: Optional[str] = None
     full_name: Optional[str] = None
     apns_device_token: Optional[str] = None
+    nonce: Optional[str] = None    # raw nonce; server SHA-256s and matches token's nonce claim
 
 
 class AppleSignInResponse(SQLModel):
@@ -343,6 +350,7 @@ class AgentPublicResponse(SQLModel):
     name: str
     description: Optional[str] = None
     logo_url: Optional[str] = None
+    accent_color: Optional[str] = None
     agent_type: Optional[str] = None
     created_at: datetime
 
@@ -355,6 +363,8 @@ class HistoryEntry(SQLModel):
     message_id: str
     agent_id: str
     agent_name: str
+    agent_logo_url: Optional[str] = None
+    agent_accent_color: Optional[str] = None
     title: str
     body: str
     category_id: str

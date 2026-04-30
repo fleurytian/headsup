@@ -12,6 +12,7 @@ We verify:
 
 Returns the verified claims (sub = stable Apple user ID, email if present).
 """
+import hashlib
 import time
 from typing import Optional
 
@@ -40,9 +41,16 @@ async def _get_apple_keys() -> list[dict]:
     return keys
 
 
-async def verify_identity_token(token: str) -> dict:
+async def verify_identity_token(token: str, *, raw_nonce: Optional[str] = None) -> dict:
     """
     Returns Apple's claims dict on success. Raises ValueError on any check failure.
+
+    `raw_nonce` is the unhashed nonce the iOS client passed to
+    ASAuthorizationAppleIDRequest.nonce as the SHA-256 *hex digest*. Apple
+    echoes the *hex digest* in the token's `nonce` claim. If the caller
+    provides `raw_nonce`, we recompute the digest and compare to the claim
+    — and reject the token if they don't match. This stops a leaked
+    identity_token from being replayed without the client device's secret.
     """
     try:
         unverified_header = jwt.get_unverified_header(token)
@@ -83,5 +91,10 @@ async def verify_identity_token(token: str) -> dict:
 
     if not claims.get("sub"):
         raise ValueError("Token missing sub (Apple user id)")
+
+    if raw_nonce is not None:
+        expected = hashlib.sha256(raw_nonce.encode("utf-8")).hexdigest()
+        if claims.get("nonce") != expected:
+            raise ValueError("Token nonce mismatch (replay/relay attempt)")
 
     return claims

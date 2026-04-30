@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database import create_db_and_tables
-from routers import agents, app as app_router, categories, push, users, web
+from routers import admin, agents, app as app_router, categories, push, users, web
 from services.webhook import retry_loop
 
 
@@ -41,6 +41,7 @@ api.include_router(push.router, prefix="/v1")
 api.include_router(categories.router, prefix="/v1")
 api.include_router(app_router.router, prefix="/v1")
 api.include_router(web.router)
+api.include_router(admin.router)
 
 
 @api.get("/health")
@@ -332,7 +333,7 @@ there is no waiting period and no soft-delete copy retained.</p>
 change takes effect.</p>
 
 <h2>Contact</h2>
-<p><a href="mailto:hi@headsup.md">hi@headsup.md</a></p>
+<p><a href="mailto:fleurytian@gmail.com">fleurytian@gmail.com</a></p>
 
 <hr>
 <p style="color:#8B8580;font-size:13px"><a href="/">&larr; back to headsup.md</a></p>

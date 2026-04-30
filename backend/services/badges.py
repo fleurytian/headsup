@@ -225,24 +225,36 @@ def _award(session: Session, badge_id: str, *, user_id: Optional[str] = None,
     return True
 
 
-async def celebrate_async(awarded_ids: list[str], *, user_id: Optional[str] = None) -> None:
-    """Best-effort: send a special user-facing push for each newly-earned
-    user badge. Agent badges don't get a push (agent has no device); they
-    surface via a future GET /v1/agents/me/badges endpoint.
+async def celebrate_async(
+    awarded_ids: list[str],
+    *,
+    user_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+) -> None:
+    """Best-effort: notify the user (push) or the agent (webhook) for each
+    newly-earned badge. Agent badges fire a webhook with `subtype:badge_earned`
+    so agents can react (log it, mention it in chat) — they have no device,
+    so a push doesn't make sense.
 
     Opens its own DB session — designed to be enqueued via FastAPI
     background_tasks AFTER the request session has closed.
     """
-    if not awarded_ids or user_id is None:
+    if not awarded_ids:
         return
     from database import engine
-    from services.apns import send_push as _send_push
 
+    if user_id is not None:
+        await _celebrate_user_async(awarded_ids, user_id, engine)
+    if agent_id is not None:
+        await _celebrate_agent_async(awarded_ids, agent_id, engine)
+
+
+async def _celebrate_user_async(awarded_ids: list[str], user_id: str, engine) -> None:
+    from services.apns import send_push as _send_push
     with Session(engine) as session:
         user = session.get(AppUser, user_id)
         if not user or not user.apns_device_token:
             return
-
         for bid in awarded_ids:
             b = session.get(BadgeRow, bid)
             if not b:
@@ -272,6 +284,81 @@ async def celebrate_async(awarded_ids: list[str], *, user_id: Optional[str] = No
                 sound="default",
                 level="passive",
             )
+
+
+async def _celebrate_agent_async(awarded_ids: list[str], agent_id: str, engine) -> None:
+    """Fire one custom webhook per newly-earned agent badge.
+
+    Skipped if the agent has no `webhook_url` (the agent should poll
+    /v1/agents/me/badges instead). Reuses the standard webhook signing.
+    """
+    import hashlib, hmac, json as _json, httpx
+    with Session(engine) as session:
+        agent = session.get(Agent, agent_id)
+        if not agent or not agent.webhook_url:
+            # Mark them notified so we don't re-process forever; the agent
+            # can still see them via GET /v1/agents/me/badges.
+            for bid in awarded_ids:
+                ee = session.exec(
+                    select(EarnedBadge).where(
+                        EarnedBadge.badge_id == bid,
+                        EarnedBadge.agent_id == agent_id,
+                    )
+                ).first()
+                if ee and not ee.notified:
+                    ee.notified = True
+                    session.add(ee)
+            session.commit()
+            return
+
+        for bid in awarded_ids:
+            b = session.get(BadgeRow, bid)
+            if not b:
+                continue
+            ee = session.exec(
+                select(EarnedBadge).where(
+                    EarnedBadge.badge_id == bid,
+                    EarnedBadge.agent_id == agent_id,
+                )
+            ).first()
+            if ee and ee.notified:
+                continue
+            payload = {
+                "subtype": "badge_earned",
+                "agent_id": agent_id,
+                "badge": {
+                    "id": b.id,
+                    "name_zh": b.name_zh,
+                    "name_en": b.name_en,
+                    "description_zh": b.description_zh,
+                    "description_en": b.description_en,
+                    "icon": b.icon,
+                    "scope": b.scope,
+                },
+                "earned_at": (ee.earned_at if ee else datetime.utcnow()).isoformat(),
+            }
+            body = _json.dumps(payload).encode()
+            sig = "sha256=" + hmac.new(
+                agent.api_key.encode(), body, hashlib.sha256
+            ).hexdigest()
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(
+                        agent.webhook_url,
+                        content=body,
+                        headers={
+                            "Content-Type": "application/json",
+                            "X-Webhook-Signature": sig,
+                            "X-HeadsUp-Agent-ID": agent_id,
+                            "X-HeadsUp-Event": "badge_earned",
+                        },
+                    )
+            except Exception:
+                pass
+            if ee:
+                ee.notified = True
+                session.add(ee)
+                session.commit()
 
 
 # Each rule receives a session + relevant ids, optionally returns awarded ids.

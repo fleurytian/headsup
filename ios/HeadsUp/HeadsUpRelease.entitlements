@@ -12,5 +12,9 @@
     <true/>
     <key>com.apple.developer.usernotifications.time-sensitive</key>
     <true/>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.md.headsup</string>
+    </array>
 </dict>
 </plist>

@@ -6,6 +6,46 @@ struct OnboardingView: View {
     @EnvironmentObject var push: PushService
     @EnvironmentObject var loc: Localizer
 
+    /// Map ASAuthorizationError codes to a sentence the user can act on
+    /// instead of "The operation couldn't be completed (1001)".
+    private func friendlyAppleError(_ error: Error) -> String {
+        let ns = error as NSError
+        if let code = ASAuthorizationError.Code(rawValue: ns.code) {
+            switch code {
+            case .canceled:
+                return T(
+                    "你取消了登录。再点一次按钮就能继续。",
+                    "You canceled. Tap the button to try again."
+                )
+            case .invalidResponse:
+                return T(
+                    "Apple 返回意外的响应,请稍后再试一次。",
+                    "Apple returned an unexpected response. Try again in a moment."
+                )
+            case .notHandled:
+                return T(
+                    "这台设备暂时无法登录,请稍后重试或检查 Apple ID 设置。",
+                    "Apple Sign-In couldn't complete here. Try again or check your Apple ID settings."
+                )
+            case .failed:
+                return T(
+                    "登录失败,请检查网络后重试。",
+                    "Sign-in failed. Check your network and try again."
+                )
+            case .notInteractive:
+                return T(
+                    "需要先点一下登录按钮。",
+                    "Tap the Sign in button to continue."
+                )
+            case .unknown:
+                fallthrough
+            @unknown default:
+                break
+            }
+        }
+        return error.localizedDescription
+    }
+
     var body: some View {
         ZStack {
             HU.C.bg.ignoresSafeArea()
@@ -53,7 +93,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HairRule(label: loc.lang == .zh ? "begin" : "begin")
                     SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
+                        self.auth.prepareRequest(request)
                     } onCompletion: { result in
                         switch result {
                         case .success(let auth):
@@ -66,7 +106,7 @@ struct OnboardingView: View {
                                 }
                             }
                         case .failure(let error):
-                            self.auth.lastError = error.localizedDescription
+                            self.auth.lastError = self.friendlyAppleError(error)
                         }
                     }
                     .signInWithAppleButtonStyle(.black)

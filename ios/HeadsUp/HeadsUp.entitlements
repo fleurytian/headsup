@@ -19,5 +19,13 @@
          Required when payload sets aps.interruption-level=timeSensitive. -->
     <key>com.apple.developer.usernotifications.time-sensitive</key>
     <true/>
+    <!-- App Group: lets the NSE persist incoming messages (plist) into a
+         shared container that the main app + Widget read on launch/refresh.
+         Pattern from Bark; avoids the 0xdead10cc SQLite multi-process crash
+         you get from sharing a real DB across host + extension. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.md.headsup</string>
+    </array>
 </dict>
 </plist>

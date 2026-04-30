@@ -27,6 +27,10 @@ async def deliver_webhook(delivery_id: str) -> None:
         delivery = session.get(WebhookDelivery, delivery_id)
         if not delivery:
             return
+        # Silent mark-as-read receipts are stored as deliveries (so the unread
+        # count clears) but should never be sent to the agent.
+        if delivery.status == "suppressed":
+            return
 
         agent = session.get(Agent, delivery.agent_id)
         if not agent or not agent.webhook_url:

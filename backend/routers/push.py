@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from database import engine, get_session
 from deps import get_current_agent
@@ -26,7 +26,7 @@ from services.apns import (
     MAX_IMAGE_URL_LEN,
 )
 from services.webhook import deliver_webhook
-from services import badges as badges_svc
+from services import badges as badges_svc, events
 
 router = APIRouter(tags=["push"])
 
@@ -107,6 +107,53 @@ def _resolve_category(category_id: str, agent_id: str, session: Session) -> str:
     return cat.ios_id
 
 
+def _enforce_monthly_quota(agent_id: str, session: Session) -> None:
+    """Free tier: a hard cap of N pushes per agent per calendar month (UTC).
+
+    We count from `PushMessage` rows directly — no separate counter table to
+    drift out of sync. A single SELECT COUNT(*) is plenty fast for a 100-row
+    cap and avoids the bookkeeping headache. Bump
+    settings.free_tier_monthly_pushes (env: FREE_TIER_MONTHLY_PUSHES) for
+    paid tiers per agent later.
+    """
+    from config import settings as _settings
+    cap = _settings.free_tier_monthly_pushes
+    if cap <= 0:
+        return  # 0 means "no limit"
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    used = session.exec(
+        select(func.count(PushMessage.id)).where(
+            PushMessage.agent_id == agent_id,
+            PushMessage.created_at >= month_start,
+        )
+    ).one()
+    # SQLAlchemy returns either an int or a tuple depending on dialect; normalize.
+    if isinstance(used, tuple):
+        used = used[0] if used else 0
+    if used >= cap:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "AGENT_QUOTA_EXCEEDED",
+                "message": (
+                    f"Agent has used {used}/{cap} free-tier pushes this month."
+                ),
+                "solution": (
+                    "Wait until next month, or contact us at "
+                    "fleurytian@gmail.com for a higher quota."
+                ),
+                "used": used,
+                "limit": cap,
+                "resets_at": (
+                    month_start.replace(month=month_start.month % 12 + 1)
+                    if month_start.month < 12
+                    else month_start.replace(year=month_start.year + 1, month=1)
+                ).isoformat(),
+            },
+        )
+
+
 def _get_active_user(user_key: str, agent_id: str, session: Session) -> AppUser:
     user = session.exec(select(AppUser).where(AppUser.user_key == user_key)).first()
     if not user:
@@ -147,6 +194,18 @@ def _get_active_user(user_key: str, agent_id: str, session: Session) -> AppUser:
             detail={
                 "code": "USER_MUTED",
                 "message": f"User has muted notifications until {user.mute_until.isoformat()}",
+            },
+        )
+    # Per-binding mute (user silenced THIS agent specifically).
+    if binding.mute_until and binding.mute_until > datetime.utcnow():
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "AGENT_MUTED",
+                "message": (
+                    f"User has muted this agent specifically until "
+                    f"{binding.mute_until.isoformat()}"
+                ),
             },
         )
     return user
@@ -199,6 +258,7 @@ async def push(
     session: Session = Depends(get_session),
 ):
     _validate_push_content(req)
+    _enforce_monthly_quota(agent.id, session)
     ios_category = _resolve_category(req.category_id, agent.id, session)
     # webhook_url is optional — agents without one consume responses via SSE
     # (/v1/responses/stream) or polling (/v1/responses).
@@ -238,9 +298,26 @@ async def push(
 
     # Badges: cheap synchronous eval. Failure here must not break the push.
     try:
-        badges_svc.on_push_sent(session, agent_id=agent.id, message=message)
+        awarded = badges_svc.on_push_sent(session, agent_id=agent.id, message=message)
+        if awarded:
+            background_tasks.add_task(
+                badges_svc.celebrate_async, awarded, agent_id=agent.id
+            )
     except Exception:
         pass
+
+    events.safe_log(
+        session,
+        kind="push_sent",
+        actor_kind="agent",
+        actor_id=agent.id,
+        meta={
+            "message_id": message.id,
+            "user_id": user.id,
+            "category_id": message.category_id,
+            "level": req.level,
+        },
+    )
 
     return PushResponse(message_id=message.id, status="queued", created_at=message.created_at)
 
@@ -274,9 +351,20 @@ async def retract_push(
     if not user or not user.apns_device_token:
         return {"status": "no_device"}
     try:
-        badges_svc.on_retract(session, agent_id=agent.id)
+        awarded = badges_svc.on_retract(session, agent_id=agent.id)
+        if awarded:
+            asyncio.create_task(
+                badges_svc.celebrate_async(awarded, agent_id=agent.id)
+            )
     except Exception:
         pass
+    events.safe_log(
+        session,
+        kind="push_retracted",
+        actor_kind="agent",
+        actor_id=agent.id,
+        meta={"message_id": message_id, "user_id": message.user_id},
+    )
     ok, reason = await send_silent_push(
         user.apns_device_token,
         custom_data={"delete": "1", "id": message_id, "agent_id": agent.id},
@@ -374,7 +462,10 @@ def list_responses(
     from datetime import datetime as _dt
     from models import WebhookDelivery
 
-    q = select(WebhookDelivery).where(WebhookDelivery.agent_id == agent.id)
+    q = select(WebhookDelivery).where(
+        WebhookDelivery.agent_id == agent.id,
+        WebhookDelivery.status != "suppressed",
+    )
     if since is not None:
         try:
             # ISO-8601 first; tolerate trailing Z by mapping to +00:00

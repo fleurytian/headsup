@@ -75,6 +75,24 @@ final class NotificationService: UNNotificationServiceExtension {
                 bestAttempt.attachments = [att]
             }
 
+            // Persist a snapshot to the App Group container so the host app
+            // can rebuild its offline history (and the Widget can render
+            // recents) without the user having to open the app first.
+            if let messageId = info["message_id"] as? String {
+                SharedMessageStore.shared.append(
+                    SharedMessageSnapshot(
+                        messageId: messageId,
+                        agentId: agentId,
+                        agentName: agentName,
+                        agentAvatarUrl: avatarUrlString,
+                        title: bestAttempt.title,
+                        body: bestAttempt.body,
+                        categoryId: bestAttempt.categoryIdentifier,
+                        receivedAt: Date()
+                    )
+                )
+            }
+
             // Try to upgrade to a Communication Notification. Falls back
             // silently to the regular banner if Apple's comm-notification
             // entitlement isn't granted on this build.
