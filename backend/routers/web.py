@@ -63,6 +63,37 @@ def authorize_page(
     })
 
 
+@router.post("/authorize/mint-token")
+def authorize_mint_token(
+    agent_id: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """JSON sibling of /authorize/initiate — same auth model (public, takes
+    only agent_id), but returns a {token, deep_link} JSON payload instead
+    of the HTML redirect page. Used by AddAgentView when the user pastes
+    a permanent `?agent_id=` web URL — the app mints a fresh token on the
+    spot and fires the deep link locally, no Safari round-trip needed.
+    """
+    agent = session.get(Agent, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    auth_req = AuthorizationRequest(
+        agent_id=agent_id,
+        expires_at=datetime.utcnow() + timedelta(minutes=AUTH_TOKEN_TTL_MINUTES),
+    )
+    session.add(auth_req)
+    session.commit()
+    events.safe_log(
+        session, kind="auth_link_created",
+        actor_kind="agent", actor_id=agent_id,
+        meta={"token": auth_req.token, "via": "paste"},
+    )
+    return {
+        "token": auth_req.token,
+        "deep_link": f"headsup://authorize?token={auth_req.token}",
+    }
+
+
 @router.post("/authorize/initiate")
 def authorize_initiate(
     request: Request,

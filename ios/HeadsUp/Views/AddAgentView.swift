@@ -133,9 +133,10 @@ struct AddAgentView: View {
         guard let url = URL(string: trimmed) else {
             error = T("链接格式不对", "Invalid link"); return
         }
-        // Accept both:
-        //   headsup://authorize?token=...&agent_id=...
-        //   https://headsup.md/authorize?token=...&agent_id=...
+        // Accept any of:
+        //   headsup://authorize?token=...
+        //   https://headsup.md/authorize?token=...
+        //   https://headsup.md/authorize?agent_id=...   ← permanent demo links
         let isDeepLink = url.scheme == "headsup" && url.host == "authorize"
         let isWebLink  = (url.scheme == "https" || url.scheme == "http")
                          && url.host?.hasSuffix("headsup.md") == true
@@ -143,22 +144,69 @@ struct AddAgentView: View {
         guard isDeepLink || isWebLink else {
             error = T("这不是 HeadsUp 授权链接", "Not a HeadsUp authorization link"); return
         }
-        let target: URL
-        if isWebLink {
-            // Rebuild as headsup://authorize?... so DeepLinkHandler accepts it.
+        let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let token = queryItems.first(where: { $0.name == "token" })?.value
+        let agentId = queryItems.first(where: { $0.name == "agent_id" })?.value
+
+        // Happy path — link already carries a token; just rebuild as deep link
+        // and hand off.
+        if let token, !token.isEmpty {
             var c = URLComponents()
             c.scheme = "headsup"
-            c.host   = "authorize"
-            c.queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            c.host = "authorize"
+            c.queryItems = [URLQueryItem(name: "token", value: token)]
+            if let agentId, !agentId.isEmpty {
+                c.queryItems?.append(URLQueryItem(name: "agent_id", value: agentId))
+            }
             guard let rebuilt = c.url else {
                 error = T("链接格式不对", "Invalid link"); return
             }
-            target = rebuilt
-        } else {
-            target = url
+            deepLink.handle(url: rebuilt)
+            dismiss()
+            return
         }
-        deepLink.handle(url: target)
-        dismiss()
+
+        // Permanent web link — no token, just agent_id. Mint a fresh one
+        // server-side and fire the deep link with it.
+        guard let agentId, !agentId.isEmpty else {
+            error = T("链接缺少 token 或 agent_id", "Link missing token or agent_id")
+            return
+        }
+        Task { await mintTokenAndOpen(agentId: agentId) }
+    }
+
+    @MainActor
+    private func mintTokenAndOpen(agentId: String) async {
+        struct MintResp: Decodable { let token: String }
+        let urlStr = (Bundle.main.object(forInfoDictionaryKey: "ApiBaseURL") as? String ?? "")
+            + "/authorize/mint-token"
+        guard let url = URL(string: urlStr) else {
+            error = T("链接格式不对", "Invalid link"); return
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let allowed = CharacterSet.urlQueryAllowed
+        let encoded = agentId.addingPercentEncoding(withAllowedCharacters: allowed) ?? agentId
+        req.httpBody = "agent_id=\(encoded)".data(using: .utf8)
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                error = T("授权链接已失效", "Authorization link is no longer valid")
+                return
+            }
+            let parsed = try JSONDecoder().decode(MintResp.self, from: data)
+            var c = URLComponents()
+            c.scheme = "headsup"; c.host = "authorize"
+            c.queryItems = [URLQueryItem(name: "token", value: parsed.token)]
+            guard let target = c.url else {
+                error = T("链接格式不对", "Invalid link"); return
+            }
+            deepLink.handle(url: target)
+            dismiss()
+        } catch {
+            self.error = T("网络错误,稍后再试", "Network error — try again")
+        }
     }
 }
 
