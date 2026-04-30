@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 
 import json
 from database import get_session
