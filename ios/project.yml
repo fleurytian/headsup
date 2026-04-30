@@ -30,6 +30,11 @@ targets:
               - headsup
         UIBackgroundModes:
           - remote-notification
+        # Required by the com.apple.developer.usernotifications.communication
+        # entitlement — the NSE donates INSendMessageIntent so iOS renders
+        # the agent avatar as the sender (Messages-style layout).
+        NSUserActivityTypes:
+          - INSendMessageIntent
         ApiBaseURL: "https://headsup.md"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
