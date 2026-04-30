@@ -45,12 +45,18 @@ final class TipJarService: ObservableObject {
         // that succeeded server-side but the app crashed before we could
         // finish() it). Without this, the transaction stays in the queue
         // and re-fires forever.
-        transactionListener = Task.detached { [weak self] in
+        //
+        // Plain `Task { … }` (not detached) inherits this class's
+        // @MainActor isolation, so accessing `self.thanked` etc. inside
+        // it is safe under Swift 6 strict-concurrency. Detached would
+        // require MainActor.run hops + sendable-self workarounds.
+        transactionListener = Task { [weak self] in
             for await update in Transaction.updates {
+                guard let self else { return }
                 if case .verified(let tx) = update {
                     await tx.finish()
-                    await MainActor.run { self?.thanked = true }
-                    await self?.reportPurchase(transactionId: tx.id, productId: tx.productID)
+                    self.thanked = true
+                    await self.reportPurchase(transactionId: tx.id, productId: tx.productID)
                 }
             }
         }
@@ -58,6 +64,8 @@ final class TipJarService: ObservableObject {
     }
 
     deinit {
+        // Task.cancel() is nonisolated — fine to call from deinit even
+        // though this class is @MainActor.
         transactionListener?.cancel()
     }
 
