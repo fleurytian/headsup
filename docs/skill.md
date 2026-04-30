@@ -1,6 +1,6 @@
 # HeadsUp — Interactive Push Skill
 
-`skill_version: 2026-04-30.3`  ·  `last_updated: 2026-04-30`
+`skill_version: 2026-04-30.4`  ·  `last_updated: 2026-04-30`
 
 > Bump `skill_version` when anything below changes substantively. Agents that cache this doc should compare the version and re-fetch on mismatch. The version is the first thing the doc reveals so a `HEAD` or first-line read is enough to decide.
 
@@ -89,7 +89,7 @@ POST /v1/push
   "subtitle":    "Card ending 4242",       // ≤ 80 chars; appears between title and body
   "level":       "timeSensitive",          // passive | active(default) | timeSensitive | critical
   "badge":       3,                        // app icon badge number; 0 clears
-  "image_url":   "https://.../chart.png",  // right-side thumbnail in the banner
+  "image_url":   "https://.../chart.png",  // right-side thumbnail in the banner — see "Image attachments" below
   "auto_copy":   "kubectl rollout undo …", // when user taps the Copy action, copy this instead of body
   "group":       "deploys",                // thread-id; pushes with same group stack together
   "url":         "https://dashboard/...",  // tap-the-banner deep link (iOS opens in browser)
@@ -103,6 +103,63 @@ POST /v1/push
 **`badge`** — set the app icon badge to a specific number. Useful for "you have 3 pending approvals". HeadsUp clears the badge automatically when the user opens the app, so you only need to set it, not zero it.
 
 **`auto_copy`** — every push has a "Copy" lock-screen action. By default it copies the body. If `auto_copy` is set, that string gets copied instead — handy when the body is human-readable but you want a command / token / URL on the clipboard.
+
+### Image attachments
+
+`image_url` must be a public HTTPS URL the iOS Notification Service
+Extension can `GET` without auth — Apple's NSE doesn't carry your
+Bearer token along when it fetches the asset.
+
+You have two paths:
+
+1. **Host it yourself.** catbox.moe, your own CDN, a presigned S3 URL —
+   anything publicly fetchable works. Use this when you already have a
+   place to put it, or when you need the image to outlive 24 hours.
+
+2. **Upload it to HeadsUp.** Convenience endpoint for agents that
+   don't run a web host. Short-lived: rows expire in 1h by default
+   (24h max), and quota is small so we'd rather you BYO host for
+   anything frequent.
+
+   ```
+   POST /v1/upload
+   Authorization: Bearer <api_key>
+   Content-Type: multipart/form-data
+
+   file=@chart.png
+   ttl_minutes=60         # optional, 1..1440, default 60
+   ```
+
+   Returns:
+
+   ```json
+   {
+     "image_url":  "https://headsup.md/u/Xa9k3...M2Tq.png",
+     "expires_at": "2026-04-30T22:43:11Z",
+     "bytes":      184392,
+     "ttl_minutes": 60,
+     "quota_remaining": 4
+   }
+   ```
+
+   **Limits**
+
+   | Constraint                 | Value                               |
+   | -------------------------- | ----------------------------------- |
+   | Max file size              | 2 MB                                |
+   | Allowed types              | png, jpg, jpeg, webp                |
+   | TTL                        | 60 min default, 1440 min (24h) max  |
+   | Daily quota per agent      | 5 uploads / UTC day                 |
+   | URL lifetime               | until `expires_at`, then 404        |
+
+   The URL is a 24-character unguessable token (`/u/<token>.<ext>`),
+   no auth needed to fetch — same security model as Slack/Imgur:
+   guess-resistant rather than user-bound. Don't paste it anywhere
+   you wouldn't paste a Slack image link.
+
+   Hit the quota? Use catbox or your own host for that one. The two
+   paths are interoperable — you can mix uploads + external URLs
+   freely across pushes.
 
 ### Built-in categories
 

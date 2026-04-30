@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database import create_db_and_tables
-from routers import admin, agents, app as app_router, categories, push, users, web
+from routers import admin, agents, app as app_router, categories, push, uploads, users, web
 from services.webhook import retry_loop
 
 
@@ -24,8 +24,11 @@ async def lifespan(application: FastAPI):
         except Exception as e:
             print(f"badge seed failed: {e}")
     task = asyncio.create_task(retry_loop())
+    from services.uploads_cleanup import sweep_loop
+    upload_sweep = asyncio.create_task(sweep_loop())
     yield
     task.cancel()
+    upload_sweep.cancel()
 
 
 api = FastAPI(
@@ -40,6 +43,8 @@ api.include_router(users.router, prefix="/v1")
 api.include_router(push.router, prefix="/v1")
 api.include_router(categories.router, prefix="/v1")
 api.include_router(app_router.router, prefix="/v1")
+api.include_router(uploads.router, prefix="/v1")        # POST /v1/upload
+api.include_router(uploads.public_router)               # GET /u/<token>.<ext>
 api.include_router(web.router)
 api.include_router(admin.router)
 
@@ -214,8 +219,9 @@ _LANDING_HTML = """<!doctype html>
   .phone-mock .dots .dot.active { background: var(--ink); }
 
   /* Hero carousel — rotates through real iOS screenshots. Inherits
-     .scenario fade timing. */
-  .hero-carousel { max-width: 380px; margin: 0 auto; }
+     .scenario fade timing. Width tuned so image height roughly matches
+     the left column's stacked content; tweak with the left col, not solo. */
+  .hero-carousel { max-width: 320px; margin: 0 auto; }
   .hero-carousel .slot { display: none; margin: 0; }   /* zero <figure> default margin */
   .hero-carousel .slot.active { display: block; animation: fadeIn 0.5s ease; }
   .hero-carousel .shot img {

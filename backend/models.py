@@ -241,6 +241,24 @@ class Category(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class UploadedImage(SQLModel, table=True):
+    """Short-lived image uploaded by an agent for use as a push attachment.
+
+    Storage: file on disk under `backend/uploads/<token>.<ext>`. URL exposed
+    as `https://headsup.md/u/<token>.<ext>` — token is 24-char unguessable
+    (urlsafe base64 of 18 bytes), so security is "URL guessing only" like
+    Slack/Imgur. TTL is short (1h default, 24h max) and the row + the file
+    are both reaped by the cleanup task. After expiry the URL 404s.
+    """
+    token: str = Field(primary_key=True)            # 24-char urlsafe
+    agent_id: str = Field(foreign_key="agent.id", index=True)
+    ext: str                                         # "png" | "jpg" | "jpeg" | "webp"
+    bytes: int                                       # actual file size
+    sha256: str                                      # for dedup or audit
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    expires_at: datetime = Field(index=True)
+
+
 # ── API Schemas (no table=True) ───────────────────────────────────────────────
 
 class AgentRegisterRequest(SQLModel):

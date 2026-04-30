@@ -46,3 +46,4 @@ test_headsup.db
 /tmp/
 nohup.out
 /ios/screenshots/
+/backend/uploads/
