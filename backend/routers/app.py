@@ -1007,52 +1007,11 @@ def iap_purchased(
     )
 
 
-class RedeemCodeRequest(SQLModel):
-    code: str
-
-
-@router.post("/me/redeem-supporter-code")
-def redeem_supporter_code(
-    req: RedeemCodeRequest,
-    background_tasks: BackgroundTasks,
-    user: AppUser = Depends(get_authed_user),
-    session: Session = Depends(get_session),
-):
-    """Redeem a one-time code for the Supporter badge.
-
-    Issued (manually for now, via /v1/admin/sponsor-codes) after a user
-    donates on GitHub Sponsors. Codes are short, case-insensitive, and
-    single-use. Re-redemption by the same user is a no-op (already has
-    the badge); re-redemption by a *different* user gets 410.
-    """
-    from models import SupporterCode
-    code_norm = (req.code or "").strip().upper()
-    if not code_norm or len(code_norm) > 32:
-        raise HTTPException(400, "code missing or invalid")
-    row = session.exec(
-        select(SupporterCode).where(SupporterCode.code == code_norm)
-    ).first()
-    if not row:
-        raise HTTPException(404, "code not found")
-    if row.claimed_by_user_id and row.claimed_by_user_id != user.id:
-        raise HTTPException(410, "code already redeemed by someone else")
-    if not row.claimed_by_user_id:
-        row.claimed_at = datetime.utcnow()
-        row.claimed_by_user_id = user.id
-        session.add(row)
-        session.commit()
-    try:
-        awarded = badges_svc.on_user_action(session, user_id=user.id, action="donated")
-        if awarded:
-            background_tasks.add_task(badges_svc.celebrate_async, awarded, user_id=user.id)
-    except Exception:
-        pass
-    events.safe_log(
-        session, kind="supporter_code_redeemed",
-        actor_kind="user", actor_id=user.id,
-        meta={"code": code_norm, "source": row.source},
-    )
-    return {"status": "redeemed", "source": row.source}
+# GitHub-Sponsors-redeem-code path was removed — donations now go
+# exclusively through the in-app StoreKit tip jar (see /me/iap-purchased
+# above). The SupporterCode table stays in the schema for now so any
+# rows that landed during the earlier dual-path window aren't orphaned;
+# unused models are cheap to leave behind.
 
 
 @router.post("/me/ping", status_code=204)

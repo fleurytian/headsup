@@ -32,6 +32,11 @@ xcodegen          # generates HeadsUp.xcodeproj from project.yml
 open HeadsUp.xcodeproj
 ```
 
+> The `.xcodeproj/` is gitignored. Re-run `xcodegen` whenever new
+> source files appear (after `git pull`, after adding `.swift` files).
+> Otherwise Xcode will report `Cannot find 'X' in scope` for the new
+> files even though they're on disk.
+
 You'll need an Apple Developer account, an APNs `*.p8` key, and your own bundle id to ship pushes from your fork. The default reference deployment lives at <https://headsup.md>.
 
 ## Status
@@ -46,7 +51,7 @@ Nothing sensitive lives in this repo. APNs `.p8` keys, server passwords, ADMIN_T
 
 ## Donations
 
-If HeadsUp saves you keystrokes, you can buy us a coffee on [GitHub Sponsors](https://github.com/sponsors/fleurytian).
+In-app tip jar via Apple Pay (StoreKit consumable IAP) — three tiers from Settings → Tip Jar in the app.
 
 ## License
 

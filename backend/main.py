@@ -43,6 +43,12 @@ api.include_router(app_router.router, prefix="/v1")
 api.include_router(web.router)
 api.include_router(admin.router)
 
+# Serve the static directory (logo, favicon, share images, etc.) at /static.
+import os
+_static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+if os.path.isdir(_static_dir):
+    api.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
 
 @api.get("/health")
 def health():
@@ -69,6 +75,9 @@ _LANDING_HTML = """<!doctype html>
 <meta property="og:title" content="HeadsUp · md">
 <meta property="og:description" content="Let your agents give you a heads up by reading skill.md.">
 <meta property="og:url" content="https://headsup.md">
+<meta property="og:image" content="https://headsup.md/static/app-icon.png">
+<link rel="icon" type="image/png" href="/static/app-icon.png">
+<link rel="apple-touch-icon" href="/static/app-icon.png">
 <script>
 // Initial language precedence:
 //   1. ?lang=en or ?lang=zh in the URL — highest, lets visitors
@@ -197,7 +206,14 @@ _LANDING_HTML = """<!doctype html>
   }
   .toggle button.on { background: var(--ink); color: var(--bg); }
   .row { display: flex; align-items: center; justify-content: space-between; }
-  .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); margin: 14px 0 30px; }
+  .app-mark {
+    display: block; margin: 18px 0 30px;
+    width: 56px; height: 56px; border-radius: 14px;
+    box-shadow: 0 6px 20px rgba(26,24,24,0.10);
+  }
+  @media (min-width: 900px) {
+    .app-mark { width: 68px; height: 68px; border-radius: 16px; }
+  }
   h1 {
     font-size: 30px; font-weight: 800; line-height: 1.25;
     margin: 0 0 14px; letter-spacing: -0.3px;
@@ -263,7 +279,7 @@ _LANDING_HTML = """<!doctype html>
     </div>
   </div>
 
-  <div class="dot" aria-hidden="true"></div>
+  <img class="app-mark" src="/static/app-icon.png" alt="HeadsUp app icon">
 
   <div class="hero">
     <div class="col-left">

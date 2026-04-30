@@ -153,8 +153,8 @@ BUILTIN_BADGES: list[BadgeDef] = [
        criterion_en="Re-authorize an agent you had previously revoked."),
     _b("supporter",        "user",  "心意", "Supporter",
        "你让 HeadsUp 多撑一阵子。", "You kept HeadsUp running a little longer.", "💝",
-       criterion_zh="通过 GitHub Sponsors 捐赠后,在 设置 → 捐赠 旁边点 \"我捐了\"。",
-       criterion_en="After donating via GitHub Sponsors, tap 'I donated' next to the Donate row in Settings."),
+       criterion_zh="在 设置 → Tip Jar 用 Apple Pay 完成任意一档打赏。",
+       criterion_en="Complete any tip in Settings → Tip Jar via Apple Pay."),
 
     # ── LONG · Agent (10) ────────────────────────────────────────────────────
     _b("centurion",        "agent", "百夫长", "Centurion",
