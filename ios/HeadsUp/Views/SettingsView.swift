@@ -270,11 +270,7 @@ struct SettingsView: View {
         }
         .navigationTitle("")
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Settings")
-                    .font(HU.title(.bold))
-                    .foregroundStyle(HU.C.ink)
-            }
+            ToolbarItem(placement: .principal) { BrandedTitleBar() }
         }
         .toolbarBackground(HU.C.bg, for: .navigationBar)
         .task {

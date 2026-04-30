@@ -699,3 +699,18 @@ def admin_dashboard(token: str = Query(default="")):
 
   <div class='footer'>只读。刷新页面看最新数据。</div>
 </body></html>"""
+
+
+@router.post("/admin/backfill-badges")
+def admin_backfill_badges(token: str = Query(default="")):
+    """Replay badge evaluators against all historical agents/users/messages.
+
+    Awards any badges that were missed because the agent/user pre-dated a
+    given evaluator. Idempotent — safe to run multiple times. Suppresses
+    celebration pushes/webhooks (marks awarded badges as already notified).
+    """
+    _require_admin(token)
+    from services.badges import backfill_all
+    with Session(engine) as session:
+        counts = backfill_all(session)
+    return counts

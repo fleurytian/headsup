@@ -668,3 +668,112 @@ def on_retract(session: Session, *, agent_id: str) -> list[str]:
     if _award(session, "i-take-it-back", agent_id=agent_id):
         awarded.append("i-take-it-back")
     return awarded
+
+
+# ── Backfill ─────────────────────────────────────────────────────────────────
+
+
+def backfill_all(session: Session) -> dict:
+    """Replay badge evaluators against all historical data.
+
+    Idempotent — every `_award` already checks `_already_has`. Safe to run
+    multiple times; only awards the badges that were missed (e.g. agents
+    that pre-dated the badge system, or pushes sent before a specific
+    evaluator was added).
+
+    Walks history chronologically so milestone counters (centurion @ 100,
+    marathoner @ 1000) compute from the right side. Skips celebration
+    pushes/webhooks — backfilled badges shouldn't spam users with 30
+    notifications at once. Caller can clear `notified=False` later if they
+    want to surface them.
+
+    Returns per-bucket counts of newly-awarded badges.
+    """
+    counts = {"agent": 0, "user": 0, "by_badge": {}}
+
+    def _bump(bid: str, scope: str) -> None:
+        counts[scope] = counts.get(scope, 0) + 1
+        counts["by_badge"][bid] = counts["by_badge"].get(bid, 0) + 1
+
+    # ── Agent-scoped: replay PushMessage history per agent ──────────────────
+    agent_ids = session.exec(select(Agent.id)).all()
+    for agent_id in agent_ids:
+        msgs = session.exec(
+            select(PushMessage)
+            .where(PushMessage.agent_id == agent_id)
+            .order_by(PushMessage.created_at)
+        ).all()
+        for m in msgs:
+            for bid in on_push_sent(session, agent_id=agent_id, message=m):
+                # Suppress celebration on backfill — mark as notified.
+                ee = session.exec(
+                    select(EarnedBadge).where(
+                        EarnedBadge.badge_id == bid,
+                        EarnedBadge.agent_id == agent_id,
+                    )
+                ).first()
+                if ee and not ee.notified:
+                    ee.notified = True
+                    session.add(ee)
+                _bump(bid, "agent")
+        session.commit()
+
+    # ── User-scoped: replay binding lifecycle + reply history per user ──────
+    user_ids = session.exec(select(AppUser.id)).all()
+    for user_id in user_ids:
+        # Authorized → curator-101 (and hello-friend if any reply exists)
+        for bid in on_agent_authorized(session, user_id=user_id):
+            ee = session.exec(
+                select(EarnedBadge).where(
+                    EarnedBadge.badge_id == bid,
+                    EarnedBadge.user_id == user_id,
+                )
+            ).first()
+            if ee and not ee.notified:
+                ee.notified = True
+                session.add(ee)
+            _bump(bid, "user")
+        # Revoked → bouncer-trainee / bouncer-in-chief
+        for bid in on_agent_revoked(session, user_id=user_id):
+            ee = session.exec(
+                select(EarnedBadge).where(
+                    EarnedBadge.badge_id == bid,
+                    EarnedBadge.user_id == user_id,
+                )
+            ).first()
+            if ee and not ee.notified:
+                ee.notified = True
+                session.add(ee)
+            _bump(bid, "user")
+
+        # Reply history — chronological replay
+        deliveries = session.exec(
+            select(WebhookDelivery)
+            .where(WebhookDelivery.user_id == user_id)
+            .order_by(WebhookDelivery.created_at)
+        ).all()
+        for d in deliveries:
+            msg = session.get(PushMessage, d.message_id) if d.message_id else None
+            if not msg:
+                continue
+            for bid in on_push_replied(
+                session,
+                user_id=user_id,
+                agent_id=msg.agent_id,
+                button_id=d.button_id or "",
+                message=msg,
+                delivery=d,
+            ):
+                ee = session.exec(
+                    select(EarnedBadge).where(
+                        EarnedBadge.badge_id == bid,
+                        EarnedBadge.user_id == user_id,
+                    )
+                ).first()
+                if ee and not ee.notified:
+                    ee.notified = True
+                    session.add(ee)
+                _bump(bid, "user")
+        session.commit()
+
+    return counts

@@ -108,11 +108,7 @@ struct HomeView: View {
             }
             .navigationTitle("")
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("HeadsUp")
-                        .font(HU.title(.bold))
-                        .foregroundStyle(HU.C.ink)
-                }
+                ToolbarItem(placement: .principal) { BrandedTitleBar() }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink {
                         SettingsView()

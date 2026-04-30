@@ -75,11 +75,7 @@ struct ProfileView: View {
         }
         .navigationTitle("")
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(T("我的", "Profile"))
-                    .font(HU.title(.bold))
-                    .foregroundStyle(HU.C.ink)
-            }
+            ToolbarItem(placement: .principal) { BrandedTitleBar() }
         }
         .toolbarBackground(HU.C.bg, for: .navigationBar)
         .task { await load() }

@@ -82,9 +82,7 @@ struct HistoryView: View {
         }
         .navigationTitle("")
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("History").font(HU.title(.bold)).foregroundStyle(HU.C.ink)
-            }
+            ToolbarItem(placement: .principal) { BrandedTitleBar() }
         }
         .toolbarBackground(HU.C.bg, for: .navigationBar)
         .refreshable { await load() }
