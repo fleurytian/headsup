@@ -213,35 +213,32 @@ _LANDING_HTML = """<!doctype html>
   }
   .phone-mock .dots .dot.active { background: var(--ink); }
 
-  /* Real iOS app screenshots — shown below the hero. */
-  .app-preview {
-    margin: 64px 0 32px;
-    text-align: center;
-  }
-  .app-preview h2 {
-    font-size: 14px; font-weight: 600; letter-spacing: 1.2px;
-    color: var(--muted); text-transform: uppercase;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    margin: 0 0 28px;
-  }
-  .app-preview .shots {
-    display: flex; gap: 24px; justify-content: center;
-    flex-wrap: wrap; align-items: flex-start;
-  }
-  .app-preview .shot {
-    flex: 0 0 auto; max-width: 260px; width: 100%;
-  }
-  .app-preview .shot img {
+  /* Hero carousel — outer rotation between 5 real iOS screenshots and the
+     animated lock-screen mockup. Inherits .scenario fade timing. */
+  .hero-carousel { max-width: 320px; margin: 0 auto; }
+  .hero-carousel .slot { display: none; }
+  .hero-carousel .slot.active { display: block; animation: fadeIn 0.5s ease; }
+  .hero-carousel .shot img {
     width: 100%; height: auto; display: block;
-    border-radius: 28px;
-    box-shadow: 0 16px 48px rgba(26,24,24,0.16);
+    border-radius: 32px;
+    box-shadow: 0 20px 50px rgba(26,24,24,0.18);
     border: 1px solid var(--line);
   }
-  .app-preview .shot .caption {
-    margin-top: 12px; font-size: 12px; color: var(--muted);
+  .hero-carousel .caption {
+    margin-top: 14px; text-align: center;
+    font-size: 11px; color: var(--muted);
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    letter-spacing: 0.6px;
+    letter-spacing: 1px; text-transform: uppercase;
   }
+  .hero-carousel .outer-dots {
+    display: flex; justify-content: center; gap: 6px; margin-top: 16px;
+  }
+  .hero-carousel .outer-dots .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--line); transition: background 0.3s;
+    cursor: pointer;
+  }
+  .hero-carousel .outer-dots .dot.active { background: var(--ink); }
   .eyebrow {
     font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
     color: var(--muted); text-transform: lowercase;
@@ -402,7 +399,46 @@ _LANDING_HTML = """<!doctype html>
     </div>
 
     <div class="col-right">
-      <div class="phone-mock" aria-hidden="true">
+      <div class="hero-carousel">
+
+        <!-- Slot 1 — onboarding (Sign in with Apple) -->
+        <figure class="slot shot active">
+          <img src="/static/screenshots/01-onboarding.png" alt="Sign in" loading="lazy">
+          <figcaption class="caption" data-lang="en">sign in</figcaption>
+          <figcaption class="caption" data-lang="zh">登录</figcaption>
+        </figure>
+
+        <!-- Slot 2 — agent list / home -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/02-home.png" alt="Your agents" loading="lazy">
+          <figcaption class="caption" data-lang="en">your agents</figcaption>
+          <figcaption class="caption" data-lang="zh">你的 agents</figcaption>
+        </figure>
+
+        <!-- Slot 3 — authorize consent -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/03-authorize.png" alt="Authorize an agent" loading="lazy">
+          <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
+          <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
+        </figure>
+
+        <!-- Slot 4 — agent detail / history -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/04-detail.png" alt="Agent detail and history" loading="lazy">
+          <figcaption class="caption" data-lang="en">agent detail · history</figcaption>
+          <figcaption class="caption" data-lang="zh">agent 详情 · 历史</figcaption>
+        </figure>
+
+        <!-- Slot 5 — settings -->
+        <figure class="slot shot">
+          <img src="/static/screenshots/05-settings.png" alt="Settings" loading="lazy">
+          <figcaption class="caption" data-lang="en">settings</figcaption>
+          <figcaption class="caption" data-lang="zh">设置</figcaption>
+        </figure>
+
+        <!-- Slot 6 — animated lock-screen mockup -->
+        <div class="slot mockup">
+        <div class="phone-mock" aria-hidden="true">
         <div class="frame">
           <div class="screen">
             <div class="lock-time">9:41</div>
@@ -497,21 +533,20 @@ _LANDING_HTML = """<!doctype html>
             </div>
           </div>
         </div>
+        </div>
+        </div> <!-- /.slot.mockup -->
+
+        <div class="outer-dots">
+          <div class="dot active" data-i="0"></div>
+          <div class="dot" data-i="1"></div>
+          <div class="dot" data-i="2"></div>
+          <div class="dot" data-i="3"></div>
+          <div class="dot" data-i="4"></div>
+          <div class="dot" data-i="5"></div>
+        </div>
       </div>
     </div>
   </div>
-
-  <section class="app-preview">
-    <h2 data-lang="en">inside the app</h2>
-    <h2 data-lang="zh">app 内一览</h2>
-    <div class="shots">
-      <figure class="shot">
-        <img src="/static/screenshots/authorize.png" alt="Authorize an agent" loading="lazy">
-        <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
-        <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
-      </figure>
-    </div>
-  </section>
 
   <footer>
     <span data-lang="en">A quiet protocol for interactive notifications.</span>
@@ -554,27 +589,45 @@ _LANDING_HTML = """<!doctype html>
   // (toggle button, hidden classes, copy button label).
   setLang(document.documentElement.dataset.langPref || 'en');
 
-  // ── Phone-mock scenario carousel ──────────────────────────────────────────
-  // Rotate through the notification scenarios every 5s. Pauses on hover so a
-  // visitor can read whichever one caught their eye.
+  // ── Inner mockup scenarios — only rotate while the mockup slot is active ──
   const scenarios = document.querySelectorAll('.phone-mock .scenario');
-  const dots = document.querySelectorAll('.phone-mock .dots .dot');
-  if (scenarios.length > 1) {
+  const innerDots = document.querySelectorAll('.phone-mock .dots .dot');
+  let scenarioIdx = 0;
+  function advanceScenario() {
+    if (scenarios.length <= 1) return;
+    scenarios[scenarioIdx].classList.remove('active');
+    innerDots[scenarioIdx] && innerDots[scenarioIdx].classList.remove('active');
+    scenarioIdx = (scenarioIdx + 1) % scenarios.length;
+    scenarios[scenarioIdx].classList.add('active');
+    innerDots[scenarioIdx] && innerDots[scenarioIdx].classList.add('active');
+  }
+  setInterval(() => {
+    const mockSlot = document.querySelector('.hero-carousel .slot.mockup');
+    if (mockSlot && mockSlot.classList.contains('active')) advanceScenario();
+  }, 4000);
+
+  // ── Outer hero carousel — 6 slots: 5 screenshots + lock-screen mockup ─────
+  const slots = document.querySelectorAll('.hero-carousel .slot');
+  const outerDots = document.querySelectorAll('.hero-carousel .outer-dots .dot');
+  if (slots.length > 1) {
     let i = 0;
     let paused = false;
-    const phone = document.querySelector('.phone-mock');
-    if (phone) {
-      phone.addEventListener('mouseenter', () => { paused = true; });
-      phone.addEventListener('mouseleave', () => { paused = false; });
+    const carousel = document.querySelector('.hero-carousel');
+    if (carousel) {
+      carousel.addEventListener('mouseenter', () => { paused = true; });
+      carousel.addEventListener('mouseleave', () => { paused = false; });
     }
-    setInterval(() => {
-      if (paused) return;
-      scenarios[i].classList.remove('active');
-      dots[i] && dots[i].classList.remove('active');
-      i = (i + 1) % scenarios.length;
-      scenarios[i].classList.add('active');
-      dots[i] && dots[i].classList.add('active');
-    }, 5000);
+    function go(next) {
+      slots[i].classList.remove('active');
+      outerDots[i] && outerDots[i].classList.remove('active');
+      i = (next + slots.length) % slots.length;
+      slots[i].classList.add('active');
+      outerDots[i] && outerDots[i].classList.add('active');
+    }
+    outerDots.forEach((d, idx) => {
+      d.addEventListener('click', () => { go(idx); paused = true; });
+    });
+    setInterval(() => { if (!paused) go(i + 1); }, 5500);
   }
 })();
 </script>
