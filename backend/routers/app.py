@@ -926,6 +926,103 @@ def app_opened_ping(
     )
 
 
+@router.post("/me/demo-push", status_code=202)
+async def demo_push(
+    background_tasks: BackgroundTasks,
+    user: AppUser = Depends(get_authed_user),
+    session: Session = Depends(get_session),
+):
+    """Reviewer-friendly self-test: ensures a 'HeadsUp Demo' agent exists,
+    binds it to the caller if not already bound, and fires one push the
+    user can long-press to test the reply flow.
+
+    Doubles as a smoke test for end-users — Settings has a 'Test
+    notification' button that hits this. No API key plumbing required;
+    the user is already authenticated.
+
+    Push is `confirm_reject` so the reviewer sees a real two-button reply
+    dialog (the most representative case of HeadsUp's value prop).
+    """
+    from auth import hash_password
+    DEMO_EMAIL = "demo@headsup.md"
+
+    # 1. Make sure the Demo agent exists. Idempotent — first call creates,
+    #    subsequent calls reuse the same row.
+    demo_agent = session.exec(select(Agent).where(Agent.email == DEMO_EMAIL)).first()
+    if not demo_agent:
+        demo_agent = Agent(
+            name="HeadsUp Demo",
+            email=DEMO_EMAIL,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            description=(
+                "A built-in agent that sends one test notification when "
+                "you tap 'Test notification' in Settings."
+            ),
+            agent_type="assistant",
+            accent_color="#6B60A8",
+            webhook_url=None,
+        )
+        session.add(demo_agent)
+        session.commit()
+        session.refresh(demo_agent)
+
+    # 2. Make sure user is bound to the Demo agent.
+    binding = session.exec(
+        select(AgentUserBinding).where(
+            AgentUserBinding.agent_id == demo_agent.id,
+            AgentUserBinding.user_id == user.id,
+        )
+    ).first()
+    if not binding:
+        binding = AgentUserBinding(agent_id=demo_agent.id, user_id=user.id)
+        session.add(binding)
+        session.commit()
+    elif binding.status == "revoked":
+        binding.status = "active"
+        binding.mute_until = None
+        session.add(binding)
+        session.commit()
+
+    # 3. Send one push to the user. Reuse the regular push pipeline so
+    #    the reviewer's experience is identical to a real agent's push.
+    if not user.apns_device_token:
+        raise HTTPException(
+            400,
+            {"code": "USER_NO_DEVICE",
+             "message": "No APNs device token registered. Allow notifications first."},
+        )
+    message = PushMessage(
+        agent_id=demo_agent.id,
+        user_id=user.id,
+        title="Test notification",
+        body=(
+            "This is the HeadsUp demo. Long-press this banner to see the "
+            "reply buttons, then tap one — your response goes back to the "
+            "Demo agent within a second."
+        ),
+        category_id="confirm_reject",
+        ttl=600,
+    )
+    session.add(message)
+    session.commit()
+    session.refresh(message)
+    # Defer to the same background sender used by /v1/push.
+    from routers.push import _send_and_update
+    background_tasks.add_task(_send_and_update, message.id, user.apns_device_token)
+
+    events.safe_log(
+        session, kind="demo_push_sent",
+        actor_kind="user", actor_id=user.id,
+        meta={"agent_id": demo_agent.id, "message_id": message.id},
+    )
+    return {
+        "status": "queued",
+        "message_id": message.id,
+        "agent_id": demo_agent.id,
+        "agent_name": demo_agent.name,
+    }
+
+
 @router.get("/me/diagnose")
 def diagnose(user: AppUser = Depends(get_authed_user), session: Session = Depends(get_session)):
     """Self-test the user's setup — surfaces 'why am I not getting pushes?'."""

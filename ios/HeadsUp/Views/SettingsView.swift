@@ -149,6 +149,11 @@ struct SettingsView: View {
                         .card()
                     }
 
+                    SettingsSection(title: "demo") {
+                        DemoPushButton()
+                            .card()
+                    }
+
                     SettingsSection(title: "about") {
                         VStack(alignment: .leading, spacing: 0) {
                             SettingsKeyValue(key: "version", value: HU.versionString)
@@ -365,6 +370,81 @@ private struct SettingsKeyValue: View {
                 .lineLimit(1).truncationMode(.middle)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
+    }
+}
+
+/// "Send myself a test notification." Hits POST /v1/app/me/demo-push, which
+/// auto-binds a server-side "HeadsUp Demo" agent if not already bound and
+/// fires one confirm_reject push back to this device. Lets a brand-new user
+/// (or App Store reviewer) walk through the full lock-screen reply flow
+/// without needing to set up an external agent first.
+private struct DemoPushButton: View {
+    @State private var sending = false
+    @State private var status: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                Task { await fire() }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: sending ? "hourglass" : "bell.badge.fill")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(HU.C.accent)
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        LText("给我自己发一条测试通知",
+                              "Send myself a test notification")
+                            .font(HU.body(.medium)).foregroundStyle(HU.C.ink)
+                        LText("用来熟悉锁屏长按回复的体验。",
+                              "Walks you through the lock-screen reply flow.")
+                            .font(HU.small()).foregroundStyle(HU.C.muted)
+                    }
+                    Spacer()
+                    if sending {
+                        ProgressView().scaleEffect(0.7).tint(HU.C.muted)
+                    }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 14)
+            }
+            .buttonStyle(.plain)
+            .disabled(sending)
+
+            if let s = status {
+                Text(s)
+                    .font(HU.small())
+                    .foregroundStyle(HU.C.muted)
+                    .padding(.horizontal, 16).padding(.bottom, 12)
+            }
+        }
+    }
+
+    private func fire() async {
+        guard let session = AuthService.shared.session else { return }
+        sending = true
+        defer { sending = false }
+        status = nil
+        struct Empty: Encodable {}
+        struct Resp: Decodable {
+            let status: String?
+            let agent_name: String?
+        }
+        do {
+            let resp: Resp = try await APIClient.shared.post(
+                "/v1/app/me/demo-push",
+                body: Empty(),
+                sessionToken: session.sessionToken
+            )
+            status = T(
+                "已发送 — 几秒后到 \"\(resp.agent_name ?? "HeadsUp Demo")\" 名下,锁屏长按试试。",
+                "Sent — within a few seconds you'll get one from \"\(resp.agent_name ?? "HeadsUp Demo")\". Long-press to reply."
+            )
+        } catch {
+            status = T(
+                "发送失败: \(error.localizedDescription)",
+                "Failed: \(error.localizedDescription)"
+            )
+        }
     }
 }
 
