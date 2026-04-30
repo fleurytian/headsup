@@ -2,11 +2,14 @@
 #
 # Interactive screenshot capture for App Store Connect.
 #
-# Boots an iPhone 15 Pro Max simulator (6.9" display = the 6.7" required
-# slot — Apple's "iPhone 6.7" Display" bucket includes 6.9" models),
-# installs the latest Debug build, and waits for you to navigate the app
-# manually. Each time you press [Enter] in this terminal, it captures a
-# screenshot, saves it to `screenshots/`, and prompts for the next one.
+# Boots the largest Pro Max simulator available (default iPhone 17 Pro
+# Max — 6.9", which is what App Store Connect's "iPhone 6.9" Display"
+# bucket wants), installs the latest Debug build, and waits for you to
+# navigate the app manually. Each time you press [Enter] in this
+# terminal, it captures a screenshot, saves it to `screenshots/`.
+#
+# Override the device with:
+#   DEVICE_NAME="iPhone 17 Pro" bash scripts/screenshot.sh
 #
 # 5 captures, in this order:
 #   1. onboarding   — Sign in with Apple page
@@ -23,7 +26,7 @@
 #
 set -euo pipefail
 
-DEVICE_NAME="iPhone 15 Pro Max"
+DEVICE_NAME="${DEVICE_NAME:-iPhone 17 Pro Max}"  # override via env if needed
 PROJECT="HeadsUp.xcodeproj"
 SCHEME="HeadsUp"
 OUT_DIR="$(pwd)/screenshots"
