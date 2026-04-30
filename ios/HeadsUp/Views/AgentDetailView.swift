@@ -74,48 +74,36 @@ struct AgentDetailView: View {
 
                     // History
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Eyebrow(text: "history")
-                            Spacer()
-                            if unreadCount > 0 {
-                                Button {
-                                    showMarkReadConfirm = true
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        if marking {
-                                            ProgressView().scaleEffect(0.7).tint(HU.C.muted)
-                                        } else {
-                                            Image(systemName: "checkmark.circle")
-                                                .font(.caption2)
-                                        }
-                                        Text(T("一键已读 (\(unreadCount))",
-                                              "Mark \(unreadCount) read"))
-                                            .font(HU.small(.semibold))
-                                    }
-                                    .foregroundStyle(HU.C.muted)
-                                }
+                        Eyebrow(text: "history")
+                            .padding(.horizontal, 24)
+
+                        // Two real buttons (capsule outlines), only when there
+                        // are unanswered messages. Equal width so they read as
+                        // a paired choice — pick one of two ways to clear.
+                        if unreadCount > 0 {
+                            HStack(spacing: 10) {
+                                BulkActionButton(
+                                    icon: marking ? nil : "checkmark.circle",
+                                    busy: marking,
+                                    label: T("一键已读 (\(unreadCount))",
+                                            "Mark \(unreadCount) read"),
+                                    tint: HU.C.muted,
+                                    action: { showMarkReadConfirm = true }
+                                )
                                 .disabled(marking || deferring)
 
-                                Button {
-                                    showDeferConfirm = true
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        if deferring {
-                                            ProgressView().scaleEffect(0.7).tint(HU.C.muted)
-                                        } else {
-                                            Image(systemName: "clock.fill")
-                                                .font(.caption2)
-                                        }
-                                        Text(T("稍后再说 (\(unreadCount))",
-                                              "Defer \(unreadCount)"))
-                                            .font(HU.small(.semibold))
-                                    }
-                                    .foregroundStyle(HU.C.accent)
-                                }
+                                BulkActionButton(
+                                    icon: deferring ? nil : "clock.fill",
+                                    busy: deferring,
+                                    label: T("稍后再说 (\(unreadCount))",
+                                            "Defer \(unreadCount)"),
+                                    tint: HU.C.accent,
+                                    action: { showDeferConfirm = true }
+                                )
                                 .disabled(deferring || marking)
                             }
+                            .padding(.horizontal, 16)
                         }
-                        .padding(.horizontal, 24)
 
                         if loading && history.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).tint(HU.C.muted)
@@ -610,6 +598,37 @@ struct EditAgentSheet: View {
             nickname = overrides.nickname(for: binding.agentId) ?? ""
             pickedHex = overrides.accentHex(for: binding.agentId)
         }
+    }
+}
+
+/// Capsule-outline action button used in pairs in AgentDetailView for
+/// "mark all read" / "defer all". Equal width via `frame(maxWidth: .infinity)`
+/// so the two buttons read as a paired choice; tint controls the foreground
+/// color so the destructive-ish defer (sends real replies to the agent) can
+/// be visually distinct from the silent mark-as-read.
+private struct BulkActionButton: View {
+    var icon: String?
+    var busy: Bool = false
+    let label: String
+    var tint: Color = HU.C.ink
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if busy {
+                    ProgressView().scaleEffect(0.7).tint(tint)
+                } else if let icon {
+                    Image(systemName: icon).font(.caption.weight(.medium))
+                }
+                Text(label).font(HU.small(.semibold))
+            }
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Capsule().strokeBorder(tint.opacity(0.5), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 

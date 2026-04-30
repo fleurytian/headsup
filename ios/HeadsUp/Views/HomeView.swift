@@ -129,6 +129,13 @@ struct HomeView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 Task { await loadBindings() }
             }
+            // Refresh as soon as a reply / mark-as-read / bulk-defer / new
+            // push event happens anywhere in the app — without this, the
+            // unread chip on the home row stays stale until pull-to-refresh
+            // or backgrounding the app.
+            .onReceive(NotificationCenter.default.publisher(for: .headsupHistoryChanged)) { _ in
+                Task { await loadBindings() }
+            }
             .sheet(isPresented: $showAddAgent) {
                 AddAgentView()
             }

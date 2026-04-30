@@ -199,11 +199,24 @@ def _get_active_user(user_key: str, agent_id: str, session: Session) -> AppUser:
             actor_kind="agent", actor_id=agent_id,
             meta={"user_id": user.id, "mute_until": user.mute_until.isoformat()},
         )
+        # Retry-After in seconds — pointed at the actual mute_until so any
+        # HTTP-aware retry library (urllib, requests-retry) waits the full
+        # window instead of bouncing back with the default exponential
+        # backoff. Agents got "稍后还要重试" feeling because their LLM saw
+        # 429 without timing context.
+        retry_secs = max(1, int((user.mute_until - datetime.utcnow()).total_seconds()))
         raise HTTPException(
             status_code=429,
+            headers={"Retry-After": str(retry_secs)},
             detail={
                 "code": "USER_MUTED",
-                "message": f"User has muted notifications until {user.mute_until.isoformat()}",
+                "message": (
+                    f"User has muted ALL notifications until {user.mute_until.isoformat()}. "
+                    "This is a deliberate user action — do NOT auto-retry. Surface "
+                    "the situation to whoever asked you to send this push, or drop it."
+                ),
+                "mute_until": user.mute_until.isoformat(),
+                "retry_after_seconds": retry_secs,
             },
         )
     # Per-binding mute (user silenced THIS agent specifically).
@@ -213,14 +226,20 @@ def _get_active_user(user_key: str, agent_id: str, session: Session) -> AppUser:
             actor_kind="agent", actor_id=agent_id,
             meta={"user_id": user.id, "mute_until": binding.mute_until.isoformat()},
         )
+        retry_secs = max(1, int((binding.mute_until - datetime.utcnow()).total_seconds()))
         raise HTTPException(
             status_code=429,
+            headers={"Retry-After": str(retry_secs)},
             detail={
                 "code": "AGENT_MUTED",
                 "message": (
-                    f"User has muted this agent specifically until "
-                    f"{binding.mute_until.isoformat()}"
+                    f"User has muted YOUR agent specifically until "
+                    f"{binding.mute_until.isoformat()}. They can hear other agents fine — "
+                    "they decided yours is too noisy. Do NOT auto-retry; treat the "
+                    "underlying task as 'user opted out'."
                 ),
+                "mute_until": binding.mute_until.isoformat(),
+                "retry_after_seconds": retry_secs,
             },
         )
     return user

@@ -1,6 +1,6 @@
 # HeadsUp — Interactive Push Skill
 
-`skill_version: 2026-04-30.1`  ·  `last_updated: 2026-04-30`
+`skill_version: 2026-04-30.2`  ·  `last_updated: 2026-04-30`
 
 > Bump `skill_version` when anything below changes substantively. Agents that cache this doc should compare the version and re-fetch on mismatch. The version is the first thing the doc reveals so a `HEAD` or first-line read is enough to decide.
 
@@ -286,8 +286,8 @@ Errors come back as `{"detail": {"code": "...", "message": "...", "solution"?: "
 | `USER_NOT_FOUND` | 404 | `user_key` doesn't exist | Check the key the user gave you |
 | `USER_NOT_BOUND` | 400 | User hasn't authorized this agent | Send them your auth link from `/authorize/initiate` |
 | `USER_NO_DEVICE` | 400 | User signed in but no APNs device yet | Ask them to open the app once |
-| `USER_MUTED` | 429 | User has app-wide DND on; **no agent** can deliver until expiry | Retry after `mute_until`. This is a global "do not disturb" — do not interpret as rejection. |
-| `AGENT_MUTED` | 429 | User has muted **your specific agent** (per-binding mute) | Retry after `mute_until`. Other agents can still reach this user. Treat as a soft signal you're being noisy — consider rate-limiting your own pushes. |
+| `USER_MUTED` | 429 | User has app-wide DND on. **No agent** can deliver until `mute_until`. | **Do NOT auto-retry.** This is a deliberate "do not disturb" choice. Surface the situation to whoever asked you to send the push (or just drop it). The 429 carries `Retry-After` and `mute_until` for cases where you genuinely *must* deliver later, but in 99% of cases the right move is to abandon. |
+| `AGENT_MUTED` | 429 | User has muted **your specific agent** (per-binding mute). Other agents still reach them fine — they decided **you** are too noisy. | **Do NOT retry.** Treat the underlying task as "user opted out." Retrying after the window keeps the same noisy behavior that earned the mute in the first place. The user already revoked your right to bother them about *this thing*; respect that. |
 | `AGENT_QUOTA_EXCEEDED` | 429 | You've used all 100 free-tier pushes this calendar month | Wait until `resets_at` or upgrade. |
 | `INVALID_CATEGORY` | 400 | Unknown `category_id` | Use a built-in or create the category first |
 | `TITLE_TOO_LONG` / `BODY_TOO_LONG` / `SUBTITLE_TOO_LONG` | 400 | Length cap exceeded | See limits below; truncate before sending |
