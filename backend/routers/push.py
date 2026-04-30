@@ -132,6 +132,11 @@ def _enforce_monthly_quota(agent_id: str, session: Session) -> None:
     if isinstance(used, tuple):
         used = used[0] if used else 0
     if used >= cap:
+        events.safe_log(
+            session, kind="push_rejected_quota",
+            actor_kind="agent", actor_id=agent_id,
+            meta={"used": used, "limit": cap},
+        )
         raise HTTPException(
             status_code=429,
             detail={
@@ -189,6 +194,11 @@ def _get_active_user(user_key: str, agent_id: str, session: Session) -> AppUser:
             },
         )
     if user.mute_until and user.mute_until > datetime.utcnow():
+        events.safe_log(
+            session, kind="push_rejected_user_muted",
+            actor_kind="agent", actor_id=agent_id,
+            meta={"user_id": user.id, "mute_until": user.mute_until.isoformat()},
+        )
         raise HTTPException(
             status_code=429,
             detail={
@@ -198,6 +208,11 @@ def _get_active_user(user_key: str, agent_id: str, session: Session) -> AppUser:
         )
     # Per-binding mute (user silenced THIS agent specifically).
     if binding.mute_until and binding.mute_until > datetime.utcnow():
+        events.safe_log(
+            session, kind="push_rejected_agent_muted",
+            actor_kind="agent", actor_id=agent_id,
+            meta={"user_id": user.id, "mute_until": binding.mute_until.isoformat()},
+        )
         raise HTTPException(
             status_code=429,
             detail={

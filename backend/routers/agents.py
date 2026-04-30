@@ -17,6 +17,7 @@ from models import (
     EarnedBadge,
     gen_api_key,
 )
+from services import events
 
 AUTH_TOKEN_TTL_MINUTES = 30
 
@@ -149,6 +150,11 @@ def create_auth_link(
     session.add(auth_req)
     session.commit()
     session.refresh(auth_req)
+    events.safe_log(
+        session, kind="auth_link_created",
+        actor_kind="agent", actor_id=agent.id,
+        meta={"token": auth_req.token},
+    )
     base = settings.base_url.rstrip("/")
     return {
         "token":      auth_req.token,

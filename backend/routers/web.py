@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from auth import create_access_token, hash_password, verify_password
 from config import settings
 from database import get_session
+from services import events
 from models import (
     Agent,
     AgentUserBinding,
@@ -79,6 +80,11 @@ def authorize_initiate(
     )
     session.add(auth_req)
     session.commit()
+    events.safe_log(
+        session, kind="auth_link_created",
+        actor_kind="agent", actor_id=agent_id,
+        meta={"token": auth_req.token, "via": "web"},
+    )
 
     # Token-only deep link — the iOS app looks up agent_id from the token
     # (via /v1/app/public/auth-requests/<token>). Half the URL length, half

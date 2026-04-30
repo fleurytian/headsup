@@ -178,12 +178,12 @@ struct SettingsView: View {
                                 .padding(.horizontal, 16).padding(.vertical, 14)
                             }
                             Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)
-                            Link(destination: URL(string: "mailto:hi@headsup.md")!) {
+                            Link(destination: URL(string: "mailto:fleurytian@gmail.com")!) {
                                 HStack {
                                     LText("联系我们", "Contact")
                                         .font(HU.body()).foregroundStyle(HU.C.ink)
                                     Spacer()
-                                    Text("hi@headsup.md").font(HU.small()).foregroundStyle(HU.C.muted)
+                                    Text("fleurytian@gmail.com").font(HU.small()).foregroundStyle(HU.C.muted)
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption.weight(.medium))
                                         .foregroundStyle(HU.C.muted)

@@ -159,6 +159,111 @@ def _webhook_pending_backlog(session: Session) -> int:
     return _count(session, WebhookDelivery, WebhookDelivery.status == "pending")
 
 
+def _auth_funnel(session: Session, since: datetime) -> dict:
+    """Auth-link conversion: created → used → expired-without-use.
+
+    Source of truth is `AuthorizationRequest` (the canonical record), not
+    Event log — survives event-table truncation. Counts links *created*
+    in the window; whether they're used can happen later within the
+    30-min TTL.
+    """
+    from models import AuthorizationRequest
+    created = _count(
+        session, AuthorizationRequest,
+        AuthorizationRequest.created_at >= since,
+    )
+    used = _count(
+        session, AuthorizationRequest,
+        AuthorizationRequest.created_at >= since,
+        AuthorizationRequest.used == True,
+    )
+    expired_unused = _count(
+        session, AuthorizationRequest,
+        AuthorizationRequest.created_at >= since,
+        AuthorizationRequest.used == False,
+        AuthorizationRequest.expires_at < datetime.utcnow(),
+    )
+    return {
+        "created":         created,
+        "used":            used,
+        "expired_unused":  expired_unused,
+        "conversion_rate": (used / created * 100.0) if created else None,
+    }
+
+
+def _binding_lifecycle(session: Session, since: datetime) -> dict:
+    """New + revoked counts for the window."""
+    new_bindings = _count(
+        session, AgentUserBinding,
+        AgentUserBinding.bound_at >= since,
+    )
+    # We don't track revoked-at; use Event log instead for the time window.
+    revoked = _count(
+        session, Event,
+        Event.kind == "agent_revoked",
+        Event.created_at >= since,
+    )
+    return {
+        "new":     new_bindings,
+        "revoked": revoked,
+        "net":     new_bindings - revoked,
+    }
+
+
+def _engagement_window(session: Session, since: datetime) -> dict:
+    """User engagement signals over the window."""
+    bulk_marked_read = _count(
+        session, Event,
+        Event.kind == "bulk_marked_read",
+        Event.created_at >= since,
+    )
+    # No dedicated event for bulk-defer right now; count agent_revoked is
+    # not the same thing. Skip until we add it.
+    deletes_canceled = _count(
+        session, Event,
+        Event.kind == "delete_account_canceled",
+        Event.created_at >= since,
+    )
+    distinct_active = session.exec(
+        select(Event.actor_id).where(
+            Event.kind == "app_opened",
+            Event.actor_kind == "user",
+            Event.created_at >= since,
+            Event.actor_id != None,
+        ).distinct()
+    ).all()
+    active_users = sum(1 for r in distinct_active if r)
+    return {
+        "active_users":       active_users,
+        "bulk_marked_read":   bulk_marked_read,
+        "deletes_canceled":   deletes_canceled,
+    }
+
+
+def _rejections_window(session: Session, since: datetime) -> dict:
+    """How often /v1/push got rejected, broken out by reason."""
+    quota = _count(
+        session, Event,
+        Event.kind == "push_rejected_quota",
+        Event.created_at >= since,
+    )
+    user_muted = _count(
+        session, Event,
+        Event.kind == "push_rejected_user_muted",
+        Event.created_at >= since,
+    )
+    agent_muted = _count(
+        session, Event,
+        Event.kind == "push_rejected_agent_muted",
+        Event.created_at >= since,
+    )
+    return {
+        "quota_exceeded":  quota,
+        "user_muted":      user_muted,
+        "agent_muted":     agent_muted,
+    }
+
+
 @router.get("/admin", response_class=HTMLResponse)
 def admin_dashboard(token: str = Query(default="")):
     _require_admin(token)
@@ -180,6 +285,22 @@ def admin_dashboard(token: str = Query(default="")):
         sla_30d = _sla_window(session, last_30d)
         wh_avg_attempts = _avg_webhook_attempts(session, last_7d)
         wh_pending      = _webhook_pending_backlog(session)
+
+        funnel_24h = _auth_funnel(session, last_24h)
+        funnel_7d  = _auth_funnel(session, last_7d)
+        funnel_30d = _auth_funnel(session, last_30d)
+
+        binding_24h = _binding_lifecycle(session, last_24h)
+        binding_7d  = _binding_lifecycle(session, last_7d)
+        binding_30d = _binding_lifecycle(session, last_30d)
+
+        engage_24h = _engagement_window(session, last_24h)
+        engage_7d  = _engagement_window(session, last_7d)
+        engage_30d = _engagement_window(session, last_30d)
+
+        reject_24h = _rejections_window(session, last_24h)
+        reject_7d  = _rejections_window(session, last_7d)
+        reject_30d = _rejections_window(session, last_30d)
 
         pushes_24h = sla_24h["pushes"]
         pushes_7d  = sla_7d["pushes"]
@@ -290,6 +411,105 @@ def admin_dashboard(token: str = Query(default="")):
         f"</div>"
     )
 
+    # ── Auth funnel table ────────────────────────────────────────────────────
+    def _funnel_row(label: str, key: str, fmt=str, note: str = "") -> str:
+        v24 = funnel_24h[key]
+        v7  = funnel_7d[key]
+        v30 = funnel_30d[key]
+        return (f"<tr><td>{label}</td>"
+                f"<td class='num'>{fmt(v24)}</td>"
+                f"<td class='num'>{fmt(v7)}</td>"
+                f"<td class='num'>{fmt(v30)}</td>"
+                f"<td class='aux'>{note}</td></tr>")
+
+    funnel_html = (
+        "<table><thead><tr>"
+        "<th>Auth funnel</th><th class='num'>24h</th><th class='num'>7d</th>"
+        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "</tr></thead><tbody>"
+        + _funnel_row("Auth links created",  "created", note="Agent called /v1/agents/auth-links or /authorize/initiate.")
+        + _funnel_row("Auth links used (bound)", "used", note="User completed Authorize tap → binding created.")
+        + _funnel_row("Conversion rate", "conversion_rate", _pct, note="Users who saw an auth link and actually bound. Target ≥ 70%.")
+        + _funnel_row("Expired without use", "expired_unused", note="Token went past 30-min TTL; user never tapped.")
+        + "</tbody></table>"
+    )
+
+    # ── Binding lifecycle table ──────────────────────────────────────────────
+    def _net_cell(value: int) -> str:
+        cls = "n-ok" if value >= 0 else "n-bad"
+        return f"<td class='num'><span class='{cls}'>{value:+d}</span></td>"
+
+    binding_html = (
+        "<table><thead><tr>"
+        "<th>Binding lifecycle</th><th class='num'>24h</th><th class='num'>7d</th>"
+        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "</tr></thead><tbody>"
+        + f"<tr><td>New bindings</td>"
+          f"<td class='num'>{binding_24h['new']}</td>"
+          f"<td class='num'>{binding_7d['new']}</td>"
+          f"<td class='num'>{binding_30d['new']}</td>"
+          f"<td class='aux'>Authorize tap → binding row created (active).</td></tr>"
+        + f"<tr><td>Revocations</td>"
+          f"<td class='num'>{binding_24h['revoked']}</td>"
+          f"<td class='num'>{binding_7d['revoked']}</td>"
+          f"<td class='num'>{binding_30d['revoked']}</td>"
+          f"<td class='aux'>User swiped left → revoke. Includes deleted accounts.</td></tr>"
+        + "<tr><td>Net change</td>"
+          + _net_cell(binding_24h['net'])
+          + _net_cell(binding_7d['net'])
+          + _net_cell(binding_30d['net'])
+          + "<td class='aux'>new − revoked. Negative over 30d = churn.</td></tr>"
+        + "</tbody></table>"
+    )
+
+    # ── Engagement table ─────────────────────────────────────────────────────
+    engage_html = (
+        "<table><thead><tr>"
+        "<th>Engagement</th><th class='num'>24h</th><th class='num'>7d</th>"
+        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "</tr></thead><tbody>"
+        + f"<tr><td>Active users</td>"
+          f"<td class='num'>{engage_24h['active_users']}</td>"
+          f"<td class='num'>{engage_7d['active_users']}</td>"
+          f"<td class='num'>{engage_30d['active_users']}</td>"
+          f"<td class='aux'>Distinct users with at least one app_opened event.</td></tr>"
+        + f"<tr><td>Bulk mark-as-read</td>"
+          f"<td class='num'>{engage_24h['bulk_marked_read']}</td>"
+          f"<td class='num'>{engage_7d['bulk_marked_read']}</td>"
+          f"<td class='num'>{engage_30d['bulk_marked_read']}</td>"
+          f"<td class='aux'>Times users hit '一键已读'. High → users feel pings are noise.</td></tr>"
+        + f"<tr><td>Delete-account canceled</td>"
+          f"<td class='num'>{engage_24h['deletes_canceled']}</td>"
+          f"<td class='num'>{engage_7d['deletes_canceled']}</td>"
+          f"<td class='num'>{engage_30d['deletes_canceled']}</td>"
+          f"<td class='aux'>Users who opened the delete dialog but backed out.</td></tr>"
+        + "</tbody></table>"
+    )
+
+    # ── Rejections table ─────────────────────────────────────────────────────
+    reject_html = (
+        "<table><thead><tr>"
+        "<th>Push rejections</th><th class='num'>24h</th><th class='num'>7d</th>"
+        "<th class='num'>30d</th><th class='aux'>note</th>"
+        "</tr></thead><tbody>"
+        + f"<tr><td>USER_MUTED (app-wide DND)</td>"
+          f"<td class='num'>{reject_24h['user_muted']}</td>"
+          f"<td class='num'>{reject_7d['user_muted']}</td>"
+          f"<td class='num'>{reject_30d['user_muted']}</td>"
+          f"<td class='aux'>Pushes blocked because user has global DND on.</td></tr>"
+        + f"<tr><td>AGENT_MUTED (per-agent silence)</td>"
+          f"<td class='num'>{reject_24h['agent_muted']}</td>"
+          f"<td class='num'>{reject_7d['agent_muted']}</td>"
+          f"<td class='num'>{reject_30d['agent_muted']}</td>"
+          f"<td class='aux'>Pushes blocked because user muted that specific agent.</td></tr>"
+        + f"<tr><td>AGENT_QUOTA_EXCEEDED</td>"
+          f"<td class='num'>{reject_24h['quota_exceeded']}</td>"
+          f"<td class='num'>{reject_7d['quota_exceeded']}</td>"
+          f"<td class='num'>{reject_30d['quota_exceeded']}</td>"
+          f"<td class='aux'>Pushes blocked because agent hit free-tier monthly cap.</td></tr>"
+        + "</tbody></table>"
+    )
+
     sparks_html = "".join([
         _series_html("DAU (app opens)", dau),
         _series_html("Pushes / day",    push_per_day),
@@ -352,9 +572,21 @@ def admin_dashboard(token: str = Query(default="")):
   <div class='section'>Totals</div>
   <table>{rows_html}</table>
 
-  <div class='section'>SLA</div>
+  <div class='section'>Service health · SLA</div>
   {sla_table_html}
   {sla_extra_html}
+
+  <div class='section'>Auth funnel</div>
+  {funnel_html}
+
+  <div class='section'>Binding lifecycle</div>
+  {binding_html}
+
+  <div class='section'>Engagement</div>
+  {engage_html}
+
+  <div class='section'>Push rejections (limits triggered)</div>
+  {reject_html}
 
   <div class='section'>Trends · last 14d</div>
   {sparks_html}
