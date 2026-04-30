@@ -150,7 +150,7 @@ struct SettingsView: View {
                     // "is everything wired up" check pair: Diagnose tells
                     // you what state you're in; Demo Push is the live
                     // round-trip test of that state.
-                    SettingsSection(title: "试用 / diagnostics") {
+                    SettingsSection(title: "diagnostics") {
                         VStack(alignment: .leading, spacing: 0) {
                             DemoPushButton()
                             Rectangle().fill(HU.C.line).frame(height: 1).padding(.leading, 16)

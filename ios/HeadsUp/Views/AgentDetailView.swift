@@ -21,6 +21,10 @@ struct HistoryItem: Codable, Identifiable {
 
 struct AgentDetailView: View {
     @EnvironmentObject var auth: AuthService
+    // Observed so language toggles re-render — T() returns a snapshot
+    // String, not a reactive value. Without this, ZH labels in the
+    // detail page (Edit, mute / unread chips, alerts) stay stuck.
+    @EnvironmentObject var loc: Localizer
     let binding: AgentBinding
 
     @State private var history: [HistoryItem] = []

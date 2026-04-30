@@ -248,6 +248,11 @@ struct HomeView: View {
 
 private struct HomeBottomDock: View {
     @Binding var showAddAgent: Bool
+    // T() returns a plain String, snapshotted at view-construction time,
+    // so we need to observe Localizer here for the body to re-render
+    // when the user toggles ZH/EN. Without this, "历史 / 我的" stay
+    // stuck in whichever language the dock was first built with.
+    @EnvironmentObject var loc: Localizer
 
     var body: some View {
         HStack(alignment: .center, spacing: 24) {
