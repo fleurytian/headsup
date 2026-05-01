@@ -249,9 +249,16 @@ _LANDING_HTML = """<!doctype html>
   }
   .hero-carousel .shot img {
     width: 100%; height: auto; display: block;
-    border-radius: 32px;
-    box-shadow: 0 20px 50px rgba(26,24,24,0.18);
-    border: 1px solid var(--line);
+    border-radius: 36px;
+    /* No border — it would show as the only visible edge once the page
+       bg matches the screenshot bg. Layered shadow gives lift instead:
+       a 0.5px hairline ring (sub-pixel on retina) reads as a polished
+       device edge, the diffuse drop-shadow below sells "real photo on
+       paper". Both work regardless of the screenshot's interior color
+       (gold lock-screen wallpapers vs cream in-app shots). */
+    box-shadow:
+      0 0 0 0.5px rgba(26, 24, 24, 0.10),
+      0 24px 48px -14px rgba(26, 24, 24, 0.28);
   }
   /* When the lock-screen mockup is a carousel slot, drop its outer card
      padding so the dark bezel sits flush at the same width as a screenshot. */
