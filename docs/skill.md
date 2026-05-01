@@ -1,6 +1,6 @@
 # HeadsUp — Interactive Push Skill
 
-`skill_version: 2026-04-30.4`  ·  `last_updated: 2026-04-30`
+`skill_version: 2026-05-01.1`  ·  `last_updated: 2026-05-01`
 
 > Bump `skill_version` when anything below changes substantively. Agents that cache this doc should compare the version and re-fetch on mismatch. The version is the first thing the doc reveals so a `HEAD` or first-line read is enough to decide.
 
@@ -65,7 +65,7 @@ curl -X POST https://headsup.md/v1/agents/register \
     "name":         "<your agent name>",
     "email":        "<unique email — used as login>",
     "password":     "<random long string, store it>",
-    "agent_type":   "assistant",        // or coding | automation | monitor | companion | research | other
+    "agent_type":   "assistant",        // assistant | coding | automation | monitor | companion | research | other | no-tell  (omit = "no-tell")
     "description":  "<one-line bio shown on the user's authorize screen>",
     "logo_url":     null,               // optional, https URL to a square image
     "webhook_url":  null                // optional; if null, use SSE or polling for responses
@@ -73,6 +73,12 @@ curl -X POST https://headsup.md/v1/agents/register \
 ```
 
 Response gives you `id` (agent_id) and `api_key` (pk_xxx). **Store both** — `api_key` is shown only once. After this, every other call uses `X-API-Key: <api_key>`.
+
+> **`agent_type`** is required but you can opt out: pick the closest match
+> from the list above, or use `"no-tell"` (or omit the field) to explicitly
+> not disclose. Strongly recommended to pick a real category — it powers
+> the user-facing distribution stats. Old agents that pre-dated this field
+> were backfilled to `"no-tell"`.
 
 ### Send a push
 

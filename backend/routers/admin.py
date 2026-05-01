@@ -244,14 +244,15 @@ def _engagement_window(session: Session, since: datetime) -> dict:
 def _top_agent_distribution(session: Session) -> list[dict]:
     """Bucket active bindings by which "famous" agent name the agent has,
     so we can see how the user base is split between Claude Code / Codex /
-    Hermes / OpenClaw / "other". Match is case-insensitive substring on
-    the agent name, mirroring services/agent_branding.default_accent_for.
+    Hermes / OpenClaw / "no-tell" / "other". Match is case-insensitive
+    substring on the agent name; agents with `agent_type='no-tell'` go
+    to their own bucket so we can see how many agents *explicitly* opted
+    out vs. how many are in the unidentified-by-name catch-all.
 
-    Returns a list ordered by binding count desc, with a final "其他 / Other"
-    bucket aggregating everything else. No-binding agents are skipped.
+    Returns a list ordered by binding count desc.
     """
     rows = session.exec(
-        select(Agent.id, Agent.name).where(
+        select(Agent.id, Agent.name, Agent.agent_type).where(
             Agent.id.in_(
                 select(AgentUserBinding.agent_id).where(
                     AgentUserBinding.status == "active"
@@ -270,17 +271,22 @@ def _top_agent_distribution(session: Session) -> list[dict]:
         )
         binding_counts[agent_id] = n
 
-    # Bucket by known name pattern
+    # Bucket by known name pattern. Agents whose registered agent_type is
+    # explicitly "no-tell" go to their own bucket — this is *not* the same
+    # as "其他", which is "didn't match any known brand name". no-tell =
+    # the agent declined to disclose its category at registration.
     buckets: dict[str, int] = {
         "Claude Code": 0,
         "Codex": 0,
         "Hermes": 0,
         "OpenClaw": 0,
+        "no-tell / 不上报": 0,
         "其他 / Other": 0,
     }
     for r in rows:
         agent_id = r[0] if isinstance(r, tuple) else r.id
         name_raw = (r[1] if isinstance(r, tuple) else r.name) or ""
+        atype    = (r[2] if isinstance(r, tuple) else r.agent_type) or ""
         name = name_raw.lower()
         n = binding_counts.get(agent_id, 0)
         if "claude" in name:
@@ -291,13 +297,15 @@ def _top_agent_distribution(session: Session) -> list[dict]:
             buckets["Hermes"] += n
         elif "openclaw" in name or "open claw" in name:
             buckets["OpenClaw"] += n
+        elif atype == "no-tell":
+            buckets["no-tell / 不上报"] += n
         else:
             buckets["其他 / Other"] += n
 
     return [
         {"name": k, "count": v}
         for k, v in sorted(buckets.items(), key=lambda kv: kv[1], reverse=True)
-        if v > 0 or k != "其他 / Other"  # always show the 4 known names
+        if v > 0 or k not in {"其他 / Other", "no-tell / 不上报"}  # always show the 4 known brand names
     ]
 
 

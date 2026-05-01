@@ -23,6 +23,15 @@ async def lifespan(application: FastAPI):
             seed_badges(s)
         except Exception as e:
             print(f"badge seed failed: {e}")
+        # Backfill agent_type for rows that pre-dated the field becoming
+        # required. Idempotent — `WHERE agent_type IS NULL` finds nothing
+        # on subsequent boots. Cheap (one UPDATE) so safe to run inline.
+        try:
+            from sqlalchemy import text
+            s.exec(text("UPDATE agent SET agent_type = 'no-tell' WHERE agent_type IS NULL"))
+            s.commit()
+        except Exception as e:
+            print(f"agent_type backfill failed: {e}")
     task = asyncio.create_task(retry_loop())
     from services.uploads_cleanup import sweep_loop
     upload_sweep = asyncio.create_task(sweep_loop())

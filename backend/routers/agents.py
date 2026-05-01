@@ -31,7 +31,10 @@ def register(req: AgentRegisterRequest, session: Session = Depends(get_session))
         raise HTTPException(status_code=400, detail="Email already registered")
 
     from models import AGENT_TYPES
-    if req.agent_type and req.agent_type not in AGENT_TYPES:
+    # Required field with a default — omit = "no-tell" (explicit opt-out).
+    # Reject anything not in the whitelist, including the empty string.
+    raw_type = (req.agent_type or "").strip() or "no-tell"
+    if raw_type not in AGENT_TYPES:
         raise HTTPException(
             status_code=400,
             detail=f"agent_type must be one of: {', '.join(AGENT_TYPES.keys())}",
@@ -44,7 +47,7 @@ def register(req: AgentRegisterRequest, session: Session = Depends(get_session))
         webhook_url=req.webhook_url,
         description=req.description,
         logo_url=req.logo_url,
-        agent_type=req.agent_type,
+        agent_type=raw_type,
         accent_color=req.accent_color,
     )
     session.add(agent)

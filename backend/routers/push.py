@@ -31,20 +31,6 @@ from services import badges as badges_svc, events
 router = APIRouter(tags=["push"])
 
 
-def _default_avatar_url(agent: Agent) -> str:
-    """A generated PNG avatar for agents without logo_url.
-
-    ui-avatars.com renders a square PNG with the first letter (or two) of
-    the name on a colored background. Free, fast, no auth. Stable per-name.
-    """
-    from urllib.parse import quote
-    name = quote((agent.name or "Agent").strip()[:24] or "Agent")
-    return (
-        f"https://ui-avatars.com/api/?name={name}"
-        "&background=6B60A8&color=FFFDF8&size=512&bold=true&font-size=0.5"
-    )
-
-
 BUILTIN_CATEGORIES = {
     "confirm_reject",
     "yes_no",
@@ -252,11 +238,12 @@ async def _send_and_update(message_id: str, device_token: str):
         if not message:
             return
         agent = session.get(Agent, message.agent_id)
-        # The sender avatar is the agent's own logo, falling back to a
-        # generated initial-on-accent so every agent has an identifiable face.
-        agent_avatar = (agent.logo_url if agent else None) or (
-            _default_avatar_url(agent) if agent else None
-        )
+        # Single source of truth: only the agent's own logo. If they didn't
+        # set one, we send null and let the client (NSE + in-app list)
+        # render a local initial-on-color tile — same fallback in both
+        # places, with the same color picker, so the avatar in the
+        # notification matches the avatar in the list.
+        agent_avatar = agent.logo_url if agent else None
         ok, _reason = await send_push(
             device_token=device_token,
             title=message.title,

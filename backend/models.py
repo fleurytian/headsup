@@ -33,7 +33,9 @@ class Agent(SQLModel, table=True):
     webhook_url: Optional[str] = None
     description: Optional[str] = None     # shown to users on authorize page
     logo_url: Optional[str] = None        # optional avatar URL
-    agent_type: Optional[str] = None      # slug: assistant | coding | automation | monitor | companion | research | other
+    # Required (default "no-tell" so old rows that pre-dated the field still
+    # have a valid value after backfill). One of AGENT_TYPES keys.
+    agent_type: str = Field(default="no-tell")
     accent_color: Optional[str] = None    # hex like "#D97757" — used for avatar bg + tint everywhere
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -49,6 +51,10 @@ AGENT_TYPES = {
     "companion":  ("生活伴侣",   "Companion"),
     "research":   ("研究分析",   "Research"),
     "other":      ("其他",       "Other"),
+    # Explicit opt-out — agent doesn't want to disclose its category.
+    # Default for both new agents that omit the field and historical
+    # rows that were never set.
+    "no-tell":    ("不上报",     "Did not disclose"),
 }
 
 
