@@ -505,6 +505,11 @@ _LANDING_HTML = """<!doctype html>
   <footer>
     <span data-lang="en">A quiet protocol for interactive notifications.</span>
     <span data-lang="zh">一个安静的交互式通知协议。</span>
+    <span>
+      <a href="mailto:fleurytian@gmail.com">fleurytian@gmail.com</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/fleurytian/headsup" target="_blank" rel="noopener">GitHub</a>
+    </span>
     <span>iOS · headsup.md</span>
   </footer>
 </div>
