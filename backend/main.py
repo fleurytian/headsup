@@ -621,6 +621,33 @@ _LANDING_HTML = """<!doctype html>
     carousel.addEventListener('pointerup', endDrag);
     carousel.addEventListener('pointercancel', endDrag);
     carousel.addEventListener('lostpointercapture', endDrag);
+
+    // Mac trackpad two-finger horizontal scroll arrives as `wheel` with
+    // deltaX. macOS rubber-bands inertia, so one physical swipe fires
+    // many tiny wheel events — accumulate, threshold once, then lock
+    // long enough for the decay to die down.
+    let wheelLock = false;
+    let wheelAccum = 0;
+    let wheelDecay = null;
+    carousel.addEventListener('wheel', (e) => {
+      // Only intercept horizontal-dominant wheels; let vertical pass to
+      // the page scroller.
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      paused = true;
+      if (wheelLock) return;
+      wheelAccum += e.deltaX;
+      // Reset accumulator if the user pauses briefly between gestures.
+      clearTimeout(wheelDecay);
+      wheelDecay = setTimeout(() => { wheelAccum = 0; }, 200);
+      if (Math.abs(wheelAccum) > 60) {
+        go(i + (wheelAccum > 0 ? 1 : -1), true);
+        wheelAccum = 0;
+        wheelLock = true;
+        setTimeout(() => { wheelLock = false; }, 450);
+        setTimeout(() => { paused = false; }, 1500);
+      }
+    }, { passive: false });
   }
 })();
 </script>
