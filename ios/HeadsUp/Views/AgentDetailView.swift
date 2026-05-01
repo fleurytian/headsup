@@ -427,7 +427,22 @@ struct HistoryRow: View {
     @State private var renderedBodyCache: AttributedString = AttributedString()
     @State private var plainBodyCache: String = ""
 
-    private var displayedReply: String? { localReply ?? item.button_label }
+    /// What to render after the "→" arrow on a sent row. Skip the
+    /// "_read" sentinel that mark-all-read inserts server-side: it's a
+    /// local cleanup, not an actual reply to the agent, so it shouldn't
+    /// look like one in the UI.
+    private var displayedReply: String? {
+        if let lr = localReply { return lr }
+        if item.button_id == "_read" { return nil }
+        return item.button_label
+    }
+
+    /// User did mark-all-read on this row but never sent an actual reply.
+    /// Renders as a muted "已读" badge with no arrow, and suppresses the
+    /// inline reply buttons (the row is conceptually filed away).
+    private var isMarkedReadOnly: Bool {
+        item.button_id == "_read" && localReply == nil
+    }
 
     private var isInfoOnly: Bool { item.category_id == "info_only" }
 
@@ -530,6 +545,10 @@ struct HistoryRow: View {
                     Text("→ \(label)")
                         .font(HU.small(.semibold))
                         .foregroundStyle(HU.C.accent)
+                } else if isMarkedReadOnly {
+                    Text(T("已读", "Read"))
+                        .font(HU.small())
+                        .foregroundStyle(HU.C.muted)
                 }
                 // Visible copy chip on EVERY row, regardless of reply state.
                 // Long-press contextMenu still works for "with title" variant.
@@ -549,8 +568,10 @@ struct HistoryRow: View {
                 .buttonStyle(.plain)
             }
             .padding(.top, 2)
-            // Inline reply buttons — only when no reply yet AND the category has buttons.
-            if displayedReply == nil && item.category_id != "info_only" && !actions.isEmpty {
+            // Inline reply buttons — only when no reply yet AND the row
+            // hasn't been silently filed via mark-all-read AND the category
+            // actually has buttons.
+            if displayedReply == nil && !isMarkedReadOnly && item.category_id != "info_only" && !actions.isEmpty {
                 HStack(spacing: 8) {
                     ForEach(actions, id: \.id) { action in
                         Button {
