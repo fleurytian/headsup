@@ -250,12 +250,8 @@ _LANDING_HTML = """<!doctype html>
   .hero-carousel .shot img {
     width: 100%; height: auto; display: block;
     border-radius: 36px;
-    /* Soft single drop shadow only — no border. The shadow defines the
-       device edge so cream screenshots read as "phone screen on desk"
-       instead of "UI fragment cut out and pasted". Original 1px border
-       was the actual cause of the "visible background patch" complaint;
-       the shadow is fine. */
-    box-shadow: 0 18px 42px -10px rgba(26, 24, 24, 0.22);
+    /* Hairline border only. No shadow — clean editorial look. */
+    border: 1px solid var(--line);
   }
   /* When the lock-screen mockup is a carousel slot, drop its outer card
      padding so the dark bezel sits flush at the same width as a screenshot. */
