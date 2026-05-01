@@ -111,7 +111,7 @@ _LANDING_HTML = """<!doctype html>
 </script>
 <style>
   :root {
-    --bg: #FFFDF8;
+    --bg: #F8F3ED;
     --ink: #1A1818;
     --muted: #8B8580;
     --line: #E8E2D5;
@@ -670,7 +670,7 @@ _PRIVACY_HTML = """<!doctype html>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     max-width: 640px; margin: 0 auto; padding: 56px 24px 80px;
-    color: #1A1818; background: #FFFDF8; line-height: 1.6; }
+    color: #1A1818; background: #F8F3ED; line-height: 1.6; }
   h1 { font-size: 28px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.3px; }
   h2 { font-size: 17px; margin-top: 36px; margin-bottom: 6px; }
   p, li { font-size: 15px; color: #2a2727; }
