@@ -223,13 +223,30 @@ _LANDING_HTML = """<!doctype html>
      the left column's stacked content; tweak with the left col, not solo. */
   .hero-carousel {
     max-width: 320px; margin: 0 auto;
+    overflow: hidden;
     /* iOS Safari otherwise interprets horizontal swipes as ambiguous and
        co-fires page scroll. Yield vertical scroll, capture horizontal. */
     touch-action: pan-y;
     -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  .hero-carousel .slot { display: none; margin: 0; }   /* zero <figure> default margin */
-  .hero-carousel .slot.active { display: block; animation: fadeIn 0.5s ease; }
+  /* Track holds all slides side-by-side and slides horizontally. Swipe
+     follows the finger in real time; .snap re-enables the spring once
+     the user lets go. */
+  .hero-carousel-track {
+    display: flex;
+    align-items: flex-start;
+    will-change: transform;
+  }
+  .hero-carousel-track.snap {
+    transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .hero-carousel .slot {
+    flex: 0 0 100%;
+    margin: 0;
+    /* Keep height predictable across slides — figure default styles +
+       slot-specific styles below handle the bezel/image sizing. */
+  }
   .hero-carousel .shot img {
     width: 100%; height: auto; display: block;
     border-radius: 32px;
@@ -420,56 +437,58 @@ _LANDING_HTML = """<!doctype html>
 
     <div class="col-right">
       <div class="hero-carousel">
+        <div class="hero-carousel-track snap">
 
-        <!-- Slot 1 — onboarding -->
-        <figure class="slot shot active">
-          <img src="/static/screenshots/01-onboarding.webp" alt="Sign in" loading="lazy">
-          <figcaption class="caption" data-lang="en">sign in</figcaption>
-          <figcaption class="caption" data-lang="zh">登录</figcaption>
-        </figure>
+          <!-- Slot 1 — onboarding -->
+          <figure class="slot shot active">
+            <img src="/static/screenshots/01-onboarding.webp" alt="Sign in" loading="lazy" draggable="false">
+            <figcaption class="caption" data-lang="en">sign in</figcaption>
+            <figcaption class="caption" data-lang="zh">登录</figcaption>
+          </figure>
 
-        <!-- Slot 2 — home / agent list -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/02-home.webp" alt="Your agents" loading="lazy">
-          <figcaption class="caption" data-lang="en">your agents</figcaption>
-          <figcaption class="caption" data-lang="zh">你的 agents</figcaption>
-        </figure>
+          <!-- Slot 2 — home / agent list -->
+          <figure class="slot shot">
+            <img src="/static/screenshots/02-home.webp" alt="Your agents" loading="lazy" draggable="false">
+            <figcaption class="caption" data-lang="en">your agents</figcaption>
+            <figcaption class="caption" data-lang="zh">你的 agents</figcaption>
+          </figure>
 
-        <!-- Slot 3 — push arrives on lock screen -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/06-push-collapsed.webp" alt="Push arrives on the lock screen" loading="lazy">
-          <figcaption class="caption" data-lang="en">it lands on your lock screen</figcaption>
-          <figcaption class="caption" data-lang="zh">直接落到你的锁屏</figcaption>
-        </figure>
+          <!-- Slot 3 — push arrives on lock screen -->
+          <figure class="slot shot">
+            <img src="/static/screenshots/06-push-collapsed.webp" alt="Push arrives on the lock screen" loading="lazy" draggable="false">
+            <figcaption class="caption" data-lang="en">it lands on your lock screen</figcaption>
+            <figcaption class="caption" data-lang="zh">直接落到你的锁屏</figcaption>
+          </figure>
 
-        <!-- Slot 4 — push expanded with image + 4 actions -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/07-push-expanded.webp" alt="Long-press to see image and reply options" loading="lazy">
-          <figcaption class="caption" data-lang="en">long-press to reply with one tap</figcaption>
-          <figcaption class="caption" data-lang="zh">长按一键回复</figcaption>
-        </figure>
+          <!-- Slot 4 — push expanded with image + 4 actions -->
+          <figure class="slot shot">
+            <img src="/static/screenshots/07-push-expanded.webp" alt="Long-press to see image and reply options" loading="lazy" draggable="false">
+            <figcaption class="caption" data-lang="en">long-press to reply with one tap</figcaption>
+            <figcaption class="caption" data-lang="zh">长按一键回复</figcaption>
+          </figure>
 
-        <!-- Slot 5 — authorize consent -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/03-authorize.webp" alt="Authorize an agent" loading="lazy">
-          <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
-          <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
-        </figure>
+          <!-- Slot 5 — authorize consent -->
+          <figure class="slot shot">
+            <img src="/static/screenshots/03-authorize.webp" alt="Authorize an agent" loading="lazy" draggable="false">
+            <figcaption class="caption" data-lang="en">authorize an agent</figcaption>
+            <figcaption class="caption" data-lang="zh">授权一个 agent</figcaption>
+          </figure>
 
-        <!-- Slot 6 — agent detail / history -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/04-detail.webp" alt="Agent detail and history" loading="lazy">
-          <figcaption class="caption" data-lang="en">agent detail · history</figcaption>
-          <figcaption class="caption" data-lang="zh">agent 详情 · 历史</figcaption>
-        </figure>
+          <!-- Slot 6 — agent detail / history -->
+          <figure class="slot shot">
+            <img src="/static/screenshots/04-detail.webp" alt="Agent detail and history" loading="lazy" draggable="false">
+            <figcaption class="caption" data-lang="en">agent detail · history</figcaption>
+            <figcaption class="caption" data-lang="zh">agent 详情 · 历史</figcaption>
+          </figure>
 
-        <!-- Slot 7 — settings -->
-        <figure class="slot shot">
-          <img src="/static/screenshots/05-settings.webp" alt="Settings" loading="lazy">
-          <figcaption class="caption" data-lang="en">settings</figcaption>
-          <figcaption class="caption" data-lang="zh">设置</figcaption>
-        </figure>
+          <!-- Slot 7 — settings -->
+          <figure class="slot shot">
+            <img src="/static/screenshots/05-settings.webp" alt="Settings" loading="lazy" draggable="false">
+            <figcaption class="caption" data-lang="en">settings</figcaption>
+            <figcaption class="caption" data-lang="zh">设置</figcaption>
+          </figure>
 
+        </div>
         <div class="outer-dots">
           <div class="dot active" data-i="0"></div>
           <div class="dot" data-i="1"></div>
@@ -524,51 +543,84 @@ _LANDING_HTML = """<!doctype html>
   // (toggle button, hidden classes, copy button label).
   setLang(document.documentElement.dataset.langPref || 'en');
 
-  // ── Hero carousel — rotate through 7 real iOS captures ──────────────────
-  const slots = document.querySelectorAll('.hero-carousel .slot');
+  // ── Hero carousel — drag-follows-finger + spring-snap ───────────────────
+  const carousel = document.querySelector('.hero-carousel');
+  const track    = document.querySelector('.hero-carousel-track');
+  const slots    = document.querySelectorAll('.hero-carousel .slot');
   const outerDots = document.querySelectorAll('.hero-carousel .outer-dots .dot');
-  if (slots.length > 1) {
+  if (carousel && track && slots.length > 1) {
     let i = 0;
     let paused = false;
-    const carousel = document.querySelector('.hero-carousel');
-    if (carousel) {
-      carousel.addEventListener('mouseenter', () => { paused = true; });
-      carousel.addEventListener('mouseleave', () => { paused = false; });
-    }
-    function go(next) {
+    let dragging = false;
+    let startX = 0, startY = 0;
+    let dragDX = 0;
+    let axisLocked = null;   // 'x' = swiping carousel | 'y' = scrolling page
+
+    function go(next, animated = true) {
       slots[i].classList.remove('active');
       outerDots[i] && outerDots[i].classList.remove('active');
       i = (next + slots.length) % slots.length;
       slots[i].classList.add('active');
       outerDots[i] && outerDots[i].classList.add('active');
+      track.classList.toggle('snap', animated);
+      track.style.transform = `translateX(-${i * 100}%)`;
     }
+
+    // Init
+    go(0, false);
+
     outerDots.forEach((d, idx) => {
       d.addEventListener('click', () => { go(idx); paused = true; });
     });
-    setInterval(() => { if (!paused) go(i + 1); }, 5500);
 
-    // Swipe to switch on touch devices. Threshold = 40px so an accidental
-    // vertical scroll doesn't trigger a slide change.
-    if (carousel) {
-      let startX = 0, startY = 0, tracking = false;
-      carousel.addEventListener('touchstart', (e) => {
-        if (e.touches.length !== 1) return;
-        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-        tracking = true;
-      }, {passive: true});
-      carousel.addEventListener('touchend', (e) => {
-        if (!tracking) return;
-        tracking = false;
-        const t = (e.changedTouches && e.changedTouches[0]) || null;
-        if (!t) return;
-        const dx = t.clientX - startX;
-        const dy = t.clientY - startY;
-        // Horizontal swipe only — let vertical pass through to page scroll.
-        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
-        paused = true;            // user took control; auto-rotate yields
-        go(dx < 0 ? i + 1 : i - 1);
-      }, {passive: true});
+    // Auto-rotate; pauses while user is touching/hovering.
+    setInterval(() => { if (!paused && !dragging) go(i + 1); }, 5500);
+    carousel.addEventListener('mouseenter', () => { paused = true; });
+    carousel.addEventListener('mouseleave', () => { paused = false; });
+
+    // Pointer Events handle touch + mouse + pen uniformly.
+    carousel.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      dragging = true;
+      paused = true;
+      axisLocked = null;
+      startX = e.clientX; startY = e.clientY; dragDX = 0;
+      track.classList.remove('snap');     // direct, real-time follow
+      try { carousel.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+
+    carousel.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (axisLocked === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
+        axisLocked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      }
+      if (axisLocked !== 'x') return;     // let the page scroll vertically
+      e.preventDefault();
+      dragDX = dx;
+      const w = carousel.offsetWidth;
+      track.style.transform = `translateX(calc(-${i * 100}% + ${dragDX}px))`;
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { carousel.releasePointerCapture(e.pointerId); } catch (_) {}
+      const w = carousel.offsetWidth;
+      let target = i;
+      // Threshold ~25% of width OR a clearly fast flick (px). Snap accordingly.
+      if (axisLocked === 'x' && Math.abs(dragDX) > Math.max(40, w * 0.18)) {
+        target = i + (dragDX < 0 ? 1 : -1);
+      }
+      go(target, true);
+      axisLocked = null;
+      // Re-arm auto-rotate after a beat so a mid-swipe interval doesn't yank.
+      setTimeout(() => { paused = false; }, 1500);
     }
+    carousel.addEventListener('pointerup', endDrag);
+    carousel.addEventListener('pointercancel', endDrag);
+    carousel.addEventListener('lostpointercapture', endDrag);
   }
 })();
 </script>
