@@ -47,3 +47,4 @@ test_headsup.db
 nohup.out
 /ios/screenshots/
 /backend/uploads/
+.claude/settings.local.json
