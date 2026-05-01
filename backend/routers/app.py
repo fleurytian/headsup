@@ -787,22 +787,46 @@ def my_history(
     agent_id: Optional[str] = None,
     limit: int = 50,
 ):
-    """Push history of this user, optionally filtered by agent."""
+    """Push history of this user, optionally filtered by agent.
+
+    Bulk-fetched agents + deliveries to avoid the N+1 the naive loop used
+    to do (50 messages = 100 extra queries → noticeable round-trip stack
+    for users on slow networks). Single agent IN-clause + single delivery
+    IN-clause cuts the SELECT count to 3 regardless of result size.
+    """
     q = select(PushMessage).where(PushMessage.user_id == user.id)
     if agent_id:
         q = q.where(PushMessage.agent_id == agent_id)
     msgs = session.exec(
         q.order_by(PushMessage.created_at.desc()).limit(min(limit, 200))
     ).all()
+    if not msgs:
+        return []
+
+    agent_ids = {m.agent_id for m in msgs}
+    msg_ids   = [m.id for m in msgs]
+
+    agents_by_id: dict[str, Agent] = {
+        a.id: a for a in session.exec(
+            select(Agent).where(Agent.id.in_(agent_ids))
+        ).all()
+    }
+
+    # Latest delivery per message — sort desc by created_at, then keep
+    # the first one we see for each message_id while iterating.
+    deliveries_by_msg: dict[str, WebhookDelivery] = {}
+    for d in session.exec(
+        select(WebhookDelivery)
+        .where(WebhookDelivery.message_id.in_(msg_ids))
+        .order_by(WebhookDelivery.created_at.desc())
+    ).all():
+        if d.message_id not in deliveries_by_msg:
+            deliveries_by_msg[d.message_id] = d
 
     out = []
     for m in msgs:
-        agent = session.get(Agent, m.agent_id)
-        # Fetch latest delivery for this message (user's button click)
-        delivery = session.exec(
-            select(WebhookDelivery).where(WebhookDelivery.message_id == m.id)
-            .order_by(WebhookDelivery.created_at.desc())
-        ).first()
+        agent = agents_by_id.get(m.agent_id)
+        delivery = deliveries_by_msg.get(m.id)
         out.append(HistoryEntry(
             message_id=m.id,
             agent_id=m.agent_id,
@@ -842,17 +866,20 @@ def my_stats(user: AppUser = Depends(get_authed_user), session: Session = Depend
             WebhookDelivery.created_at >= today_start,
         )
     ).first() or 0
-    # Unanswered across all agents (excluding info_only)
-    pending = session.exec(
-        select(PushMessage).where(
+    # Unanswered across all agents (excluding info_only). Single query,
+    # no N+1: count messages where no WebhookDelivery row exists. (LEFT
+    # JOIN ... WHERE delivery.id IS NULL is the canonical pattern.)
+    from sqlalchemy.orm import aliased
+    _wd = aliased(WebhookDelivery)
+    unread_total = session.exec(
+        select(_func.count(PushMessage.id))
+        .outerjoin(_wd, _wd.message_id == PushMessage.id)
+        .where(
             PushMessage.user_id == user.id,
             PushMessage.category_id != "info_only",
+            _wd.id == None,  # noqa: E711 — SQLAlchemy needs == None for IS NULL
         )
-    ).all()
-    unread_total = sum(
-        1 for m in pending
-        if not session.exec(select(WebhookDelivery).where(WebhookDelivery.message_id == m.id).limit(1)).first()
-    )
+    ).first() or 0
     return {
         "received_today": received_today,
         "replied_today": replied_today,
