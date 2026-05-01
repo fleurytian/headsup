@@ -250,8 +250,11 @@ _LANDING_HTML = """<!doctype html>
   .hero-carousel .shot img {
     width: 100%; height: auto; display: block;
     border-radius: 36px;
-    /* Hairline border only. No shadow — clean editorial look. */
     border: 1px solid var(--line);
+    /* Blur radius (16) < corner radius (36) — keeps the rounded corners
+       visible in the halo so it doesn't read as a square shadow under
+       a round card. */
+    box-shadow: 0 6px 16px -4px rgba(26, 24, 24, 0.14);
   }
   /* When the lock-screen mockup is a carousel slot, drop its outer card
      padding so the dark bezel sits flush at the same width as a screenshot. */
