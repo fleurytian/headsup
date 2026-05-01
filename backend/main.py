@@ -250,8 +250,11 @@ _LANDING_HTML = """<!doctype html>
   .hero-carousel .shot img {
     width: 100%; height: auto; display: block;
     border-radius: 36px;
-    /* Hairline border only. No shadow — clean editorial look. */
     border: 1px solid var(--line);
+    /* `filter: drop-shadow` follows the rounded-corner alpha mask, so
+       the halo wraps the image evenly even when our overflow:hidden
+       wrapper would have hard-clipped a `box-shadow` on the sides. */
+    filter: drop-shadow(0 14px 28px rgba(26, 24, 24, 0.16));
   }
   /* When the lock-screen mockup is a carousel slot, drop its outer card
      padding so the dark bezel sits flush at the same width as a screenshot. */
