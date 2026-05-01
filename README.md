@@ -51,7 +51,7 @@ Nothing sensitive lives in this repo. APNs `.p8` keys, server passwords, ADMIN_T
 
 ## Donations
 
-In-app tip jar via Apple Pay (StoreKit consumable IAP) — three tiers from Settings → Tip Jar in the app.
+In-app tip jar via StoreKit consumable IAP — three tiers from Settings → Tip Jar in the app.
 
 ## License
 

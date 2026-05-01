@@ -480,7 +480,7 @@ struct TipJarSection: View {
     @EnvironmentObject var loc: Localizer
 
     var body: some View {
-        SettingsSection(title: "tip jar / Apple Pay") {
+        SettingsSection(title: "tip jar") {
             VStack(alignment: .leading, spacing: 0) {
                 if tipJar.products.isEmpty {
                     Text(loc.lang == .zh
@@ -490,8 +490,8 @@ struct TipJarSection: View {
                         .foregroundStyle(HU.C.muted)
                         .padding(.horizontal, 16).padding(.vertical, 14)
                 } else {
-                    LText("用 Apple Pay 一键打赏 — 徽章自动到帐。",
-                          "Tip with Apple Pay — Supporter badge unlocks automatically.")
+                    LText("一键打赏 — Supporter 徽章自动到账。",
+                          "One-tap tip — the Supporter badge unlocks automatically.")
                         .font(HU.small())
                         .foregroundStyle(HU.C.muted)
                         .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)

@@ -33,9 +33,15 @@ struct AgentDetailView: View {
     @State private var error: String?
     @State private var revoking = false
     @State private var deferring = false
-    @State private var showDeferConfirm = false
     @State private var marking = false
-    @State private var showMarkReadConfirm = false
+    /// SwiftUI bug: stacking two `.alert(isPresented:)` on the same view
+    /// silently drops one of them. Drive both confirmations from a single
+    /// enum + presenting: parameter so only one alert modifier exists.
+    @State private var bulkConfirm: BulkConfirm? = nil
+    enum BulkConfirm: Identifiable, Hashable {
+        case markRead, deferAll
+        var id: Self { self }
+    }
     @State private var bindingState: AgentBinding? = nil
     @State private var showEditSheet = false
     @StateObject private var overrides = AgentOverrides.shared
@@ -110,7 +116,7 @@ struct AgentDetailView: View {
                                     label: T("一键已读 (\(unreadCount))",
                                             "Mark \(unreadCount) read"),
                                     tint: HU.C.muted,
-                                    action: { showMarkReadConfirm = true }
+                                    action: { bulkConfirm = .markRead }
                                 )
                                 .disabled(marking || deferring)
 
@@ -120,7 +126,7 @@ struct AgentDetailView: View {
                                     label: T("稍后再说 (\(unreadCount))",
                                             "Defer \(unreadCount)"),
                                     tint: HU.C.accent,
-                                    action: { showDeferConfirm = true }
+                                    action: { bulkConfirm = .deferAll }
                                 )
                                 .disabled(deferring || marking)
                             }
@@ -231,32 +237,43 @@ struct AgentDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .headsupHistoryChanged)) { _ in
             scheduleHistoryRefresh()
         }
-        .alert(T("清除 \(unreadCount) 条未读?", "Defer \(unreadCount) unread?"),
-               isPresented: $showDeferConfirm) {
-            Button(T("取消", "Cancel"), role: .cancel) {}
-            Button(T("全部回复\"稍后再说\"", "Reply 'later' to all"), role: .destructive) {
-                Task { await deferAllUnread() }
-            }
-        } message: {
-            LText(
-                "会向 \(binding.agentName) 发送 \(unreadCount) 条 \"稍后再说\" 回应。无法撤回。",
-                "Sends \(unreadCount) 'later' replies to \(binding.agentName). Cannot be undone."
-            )
-        }
         .sheet(isPresented: $showEditSheet) {
             EditAgentSheet(binding: bindingState ?? binding)
         }
-        .alert(T("标记 \(unreadCount) 条为已读?", "Mark \(unreadCount) as read?"),
-               isPresented: $showMarkReadConfirm) {
+        .alert(
+            (bulkConfirm == .deferAll
+                ? T("清除 \(unreadCount) 条未读?", "Defer \(unreadCount) unread?")
+                : T("标记 \(unreadCount) 条为已读?", "Mark \(unreadCount) as read?")),
+            isPresented: Binding(
+                get: { bulkConfirm != nil },
+                set: { if !$0 { bulkConfirm = nil } }
+            ),
+            presenting: bulkConfirm
+        ) { kind in
             Button(T("取消", "Cancel"), role: .cancel) {}
-            Button(T("标记已读", "Mark read")) {
-                Task { await markAllRead() }
+            switch kind {
+            case .deferAll:
+                Button(T("全部回复\"稍后再说\"", "Reply 'later' to all"), role: .destructive) {
+                    Task { await deferAllUnread() }
+                }
+            case .markRead:
+                Button(T("标记已读", "Mark read")) {
+                    Task { await markAllRead() }
+                }
             }
-        } message: {
-            LText(
-                "只在你这边清除未读 — 不会发任何回应给 \(binding.agentName)。",
-                "Clears unread on your side only — no reply is sent to \(binding.agentName)."
-            )
+        } message: { kind in
+            switch kind {
+            case .deferAll:
+                LText(
+                    "会向 \(binding.agentName) 发送 \(unreadCount) 条 \"稍后再说\" 回应。无法撤回。",
+                    "Sends \(unreadCount) 'later' replies to \(binding.agentName). Cannot be undone."
+                )
+            case .markRead:
+                LText(
+                    "只在你这边清除未读 — 不会发任何回应给 \(binding.agentName)。",
+                    "Clears unread on your side only — no reply is sent to \(binding.agentName)."
+                )
+            }
         }
     }
 
