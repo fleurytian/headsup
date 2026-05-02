@@ -471,10 +471,9 @@ private struct DemoPushButton: View {
     }
 }
 
-/// Three-tier StoreKit IAP tip jar. Apple takes 15-30%, but the path
-/// gives you instant Apple-Pay convenience and auto-awards the badge
-/// without an email roundtrip — for users who just want to drop a tip
-/// and move on.
+/// Three-tier StoreKit IAP tip jar. Apple takes 15-30%, but the in-app
+/// purchase path is one tap and auto-awards the Supporter badge without
+/// an email roundtrip — for users who just want to drop a tip and move on.
 struct TipJarSection: View {
     @StateObject private var tipJar = TipJarService.shared
     @EnvironmentObject var loc: Localizer

@@ -9,7 +9,7 @@ settings:
     DEVELOPMENT_TEAM: N74WZGGX8W
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "5"
+    CURRENT_PROJECT_VERSION: "6"
 
 targets:
   HeadsUp:
@@ -22,7 +22,7 @@ targets:
       properties:
         CFBundleDisplayName: HeadsUp
         CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "5"
+        CFBundleVersion: "6"
         UILaunchScreen:
           UIColorName: "AccentColor"
         CFBundleURLTypes:
@@ -72,7 +72,7 @@ targets:
       properties:
         CFBundleDisplayName: HeadsUp Notification Service
         CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "5"
+        CFBundleVersion: "6"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
@@ -82,7 +82,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "5"
+        CURRENT_PROJECT_VERSION: "6"
         SKIP_INSTALL: NO
 
 schemes:
