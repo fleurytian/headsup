@@ -31,6 +31,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>6</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save the invite card to your Photos library so you can share it later.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>INSendMessageIntent</string>

@@ -35,6 +35,10 @@ targets:
         # the agent avatar as the sender (Messages-style layout).
         NSUserActivityTypes:
           - INSendMessageIntent
+        # Long-press → save invite card to Photos (UIImageWriteToSavedPhoto-
+        # sAlbum). iOS shows this string in the permission prompt the
+        # first time the user taps Save.
+        NSPhotoLibraryAddUsageDescription: "Save the invite card to your Photos library so you can share it later."
         ApiBaseURL: "https://headsup.md"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

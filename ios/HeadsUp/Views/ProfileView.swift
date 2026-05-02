@@ -267,6 +267,7 @@ struct ShareInviteSheet: View {
     @EnvironmentObject var loc: Localizer
     @State private var renderedImage: UIImage?
     @State private var imageURL: URL?
+    @State private var savedFeedback = false
 
     var body: some View {
         NavigationStack {
@@ -279,6 +280,29 @@ struct ShareInviteSheet: View {
                             .frame(width: 320, height: 480)
                             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                             .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
+                            // Long-press → save to Photos directly. Saves the
+                            // full-resolution rendered image, not the on-screen
+                            // 320pt preview. Requires NSPhotoLibraryAddUsage-
+                            // Description in Info.plist (see project.yml).
+                            .contextMenu {
+                                if let img = renderedImage {
+                                    Button {
+                                        UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
+                                        savedFeedback = true
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                            savedFeedback = false
+                                        }
+                                    } label: {
+                                        Label(loc.lang == .zh ? "保存到相册" : "Save to Photos",
+                                              systemImage: "square.and.arrow.down")
+                                    }
+                                }
+                            }
+                        if savedFeedback {
+                            Text(loc.lang == .zh ? "✓ 已保存到相册" : "✓ Saved to Photos")
+                                .font(HU.small(.semibold))
+                                .foregroundStyle(HU.C.accent)
+                        }
 
                         if let img = renderedImage, let url = imageURL {
                             ShareLink(
@@ -301,6 +325,14 @@ struct ShareInviteSheet: View {
                         } else {
                             ProgressView().tint(HU.C.muted)
                         }
+
+                        Text(payload.lang == .zh
+                             ? "长按图片可直接保存到相册。"
+                             : "Long-press the card to save it directly to Photos.")
+                            .font(HU.small(.semibold))
+                            .foregroundStyle(HU.C.muted)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
 
                         Text(payload.lang == .zh
                              ? "图里只有数字和 headsup.md 链接,不会暴露你的账号或消息内容。"
@@ -408,11 +440,13 @@ private struct InviteCard: View {
 
                 Spacer()
 
-                // Bottom CTA
+                // Bottom CTA — explicit App-Store search instruction so the
+                // share image is self-contained (recipient doesn't have to
+                // ask "where do I get this app?").
                 VStack(alignment: .leading, spacing: 6 * scale) {
                     Text(lang == .zh
-                         ? "你也可以让 AI 给你提醒:"
-                         : "Want yours to too?")
+                         ? "去 App Store 搜:"
+                         : "Search the App Store for:")
                         .font(.system(size: 13 * scale))
                         .foregroundStyle(Color(red: 0.514, green: 0.498, blue: 0.475))
                     Text("headsup.md")
