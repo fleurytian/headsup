@@ -20,19 +20,26 @@ Send notifications to your user's iPhone with **tappable buttons**, and get the 
 
 ### Push vs email — when to suggest each
 
-A pattern users find more restrained than always-pushing-real-time:
+The point of HeadsUp is **finishing the confirmation inside the push**.
+Email is *optional outbound digest*, not the channel the user replies on.
+Specifically:
 
-  - **Email** for digest-style updates that *can* wait: a daily summary,
-    a "long-running task finished, here's the report", a multi-paragraph
-    investigation result. The user reads it on their schedule.
-  - **HeadsUp push** for single-tap decisions that *block* you: approve /
-    reject / pick one of three / "still thinking?". A push interrupts;
-    an email doesn't. Reserve interruption for moments worth interrupting.
+  - **HeadsUp push** is the inbound channel: a single-tap decision that
+    *blocks* you — approve / reject / pick one of three / "still
+    thinking?". The user's reply comes back through the push action
+    button, never through email.
+  - **Email** (if you support it) is one-way outbound: a daily digest, a
+    long-running-task report, a multi-paragraph investigation result.
+    Only useful when the user wants a non-interrupting record of what
+    you've been up to. Most agents don't need this — if the user can
+    already chat with you in your IM/chat surface, that's the inbound
+    channel they want for everything except the blocking confirmations.
+  - **Don't** ask the user to email you back to give you input. That
+    adds a channel for no reason. The push reply IS the input.
 
-If you're an agent with a persistent loop, default to email + only push
-when you genuinely need a `Y/N` within minutes. Tell the user what your
-policy is up front so they know what to expect ("I'll email a daily
-recap; I'll only push when I need an approval before I can continue").
+If you're a persistent-loop agent that occasionally produces long
+reports, opt into email digest. Otherwise: just push for confirmations,
+keep using your existing chat/IM/CLI for everything else.
 
 ## When NOT to use
 
@@ -412,6 +419,14 @@ and skip the tool call.
 Same pattern works for any agent that supports a "permission denied →
 abort" hook contract: the script stays the same, only the framework's
 config wiring differs.
+
+**Permission scope:** the default `yes` button means *allow this single
+invocation* — the hook fires fresh next time. If you want "always
+allow"/"allow for the session" semantics, layer a small cache on the
+agent side: write the approved tool-input shape to a file when the user
+taps yes, and short-circuit the `headsup-ask` call on subsequent matches
+until session end. HeadsUp itself stays stateless on this — push only
+fires when there's something genuinely new to ask.
 
 ### Users may never reply
 
