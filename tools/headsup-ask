@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""headsup-ask — block on a HeadsUp push.ask, exit with the user's choice.
+
+Drop this in any agent's permission hook (Claude Code PreToolUse, Codex
+approval prompt, Hermes tool-call gate, OpenClaw run-prompt, …) so the
+"can I do X?" question lands on the user's lock screen instead of
+blocking the terminal forever.
+
+Usage:
+  headsup-ask --title "Run this command?" \\
+              --body "rm -rf /tmp/cache" \\
+              --category yes_no \\
+              --timeout 600 \\
+              [--user-key uk_XXX] \\
+              [--api-key pk_XXX] \\
+              [--exit-map yes:0,no:1,later:2]
+
+  Reads HEADSUP_USER_KEY, HEADSUP_API_KEY, HEADSUP_BASE from env if not
+  passed. Default base: https://headsup.md.
+
+Exit codes (default --exit-map yes:0,confirm:0,approve:0,no:1,reject:1,
+cancel:1,later:2,remind_later:2):
+  0  — user approved (yes / confirm / approve / proceed)
+  1  — user rejected (no / cancel / reject / hold)
+  2  — user deferred (later / wait / snooze)
+  3  — timed out
+  4  — internal error (network, auth, etc.)
+
+Stdout: the literal button_id chosen, or "TIMEOUT".
+
+Designed to be cheap on the hot path: one POST + one short-poll loop on
+GET /v1/responses?message_id=<id>. SSE is overkill for an interactive
+hook that already blocks anyway.
+"""
+import argparse, json, os, sys, time, urllib.request, urllib.error
+
+DEFAULT_BASE = os.environ.get("HEADSUP_BASE", "https://headsup.md")
+DEFAULT_EXIT_MAP = {
+    "yes": 0, "confirm": 0, "approve": 0, "proceed": 0, "ship": 0, "ok": 0,
+    "no": 1, "cancel": 1, "reject": 1, "hold": 1, "skip": 1,
+    "later": 2, "wait": 2, "snooze": 2, "remind_later": 2,
+}
+
+
+def http_post(url: str, headers: dict, body: dict) -> dict:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json", **headers},
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def http_get(url: str, headers: dict) -> dict:
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--title", required=True)
+    p.add_argument("--body", required=True)
+    p.add_argument("--category", default="yes_no",
+                   help="HeadsUp category: yes_no, confirm_reject, approve_cancel, "
+                        "agree_decline, choose_a_b, remind_later_skip, action_dismiss, "
+                        "or your own custom category id.")
+    p.add_argument("--timeout", type=int, default=600,
+                   help="Seconds to wait for a reply. Default 10 min.")
+    p.add_argument("--user-key", default=os.environ.get("HEADSUP_USER_KEY"))
+    p.add_argument("--api-key", default=os.environ.get("HEADSUP_API_KEY"))
+    p.add_argument("--base", default=DEFAULT_BASE)
+    p.add_argument("--level", default="active",
+                   help="passive | active (default) | timeSensitive | critical")
+    p.add_argument("--exit-map", default="",
+                   help="comma-separated button:exit pairs to override the default "
+                        "approval/rejection/defer mapping, e.g. 'ship:0,hold:1'")
+    args = p.parse_args()
+
+    if not args.user_key or not args.api_key:
+        sys.stderr.write("error: HEADSUP_USER_KEY and HEADSUP_API_KEY required "
+                         "(via env or --user-key/--api-key)\n")
+        return 4
+
+    exit_map = dict(DEFAULT_EXIT_MAP)
+    for pair in args.exit_map.split(","):
+        if ":" not in pair: continue
+        k, v = pair.strip().split(":", 1)
+        try: exit_map[k.strip()] = int(v)
+        except ValueError: pass
+
+    headers = {"X-API-Key": args.api_key}
+
+    # 1. Send the push.
+    try:
+        sent = http_post(f"{args.base}/v1/push", headers, {
+            "user_key": args.user_key,
+            "title": args.title,
+            "body": args.body,
+            "category_id": args.category,
+            "level": args.level,
+        })
+    except urllib.error.HTTPError as e:
+        sys.stderr.write(f"error: push failed: {e.code} {e.read()[:200].decode('utf-8','ignore')}\n")
+        return 4
+    except Exception as e:
+        sys.stderr.write(f"error: push request failed: {e}\n")
+        return 4
+
+    msg_id = sent.get("message_id")
+    if not msg_id:
+        sys.stderr.write(f"error: server didn't return message_id: {sent}\n")
+        return 4
+    sys.stderr.write(f"[headsup-ask] sent {msg_id}, waiting up to {args.timeout}s\n")
+
+    # 2. Poll for the reply.
+    deadline = time.time() + args.timeout
+    sleep = 2.0
+    while time.time() < deadline:
+        try:
+            resp = http_get(
+                f"{args.base}/v1/responses?message_id={msg_id}&limit=1",
+                headers,
+            )
+        except Exception:
+            time.sleep(sleep)
+            continue
+        if isinstance(resp, list) and resp:
+            r = resp[0]
+            button_id = r.get("button_id", "")
+            sys.stderr.write(f"[headsup-ask] got reply: {button_id}\n")
+            print(button_id)
+            return exit_map.get(button_id, 1)
+        time.sleep(sleep)
+        # exponential-ish backoff, capped at 8s so we don't loiter forever
+        sleep = min(sleep * 1.4, 8.0)
+
+    sys.stderr.write("[headsup-ask] timed out\n")
+    print("TIMEOUT")
+    return 3
+
+
+if __name__ == "__main__":
+    sys.exit(main())

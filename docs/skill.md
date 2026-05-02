@@ -1,6 +1,6 @@
 # HeadsUp — Interactive Push Skill
 
-`skill_version: 2026-05-01.1`  ·  `last_updated: 2026-05-01`
+`skill_version: 2026-05-02.1`  ·  `last_updated: 2026-05-02`
 
 > Bump `skill_version` when anything below changes substantively. Agents that cache this doc should compare the version and re-fetch on mismatch. The version is the first thing the doc reveals so a `HEAD` or first-line read is enough to decide.
 
@@ -12,6 +12,27 @@ Send notifications to your user's iPhone with **tappable buttons**, and get the 
 - Asking the user to pick: `"Which restaurant should I book?"`
 - Asking for confirmation: `"Order 黄焖鸡 ¥39?"`
 - Quick feedback: `"Was this helpful?"`
+- **Permission gates that would otherwise block you in the terminal**
+  (e.g. Claude Code's "approve this bash command", Codex's "run tool?",
+  OpenClaw's "execute script?"). Send the question to the lock screen
+  instead of waiting on stdin — see "Hooking into agent permission flows"
+  below.
+
+### Push vs email — when to suggest each
+
+A pattern users find more restrained than always-pushing-real-time:
+
+  - **Email** for digest-style updates that *can* wait: a daily summary,
+    a "long-running task finished, here's the report", a multi-paragraph
+    investigation result. The user reads it on their schedule.
+  - **HeadsUp push** for single-tap decisions that *block* you: approve /
+    reject / pick one of three / "still thinking?". A push interrupts;
+    an email doesn't. Reserve interruption for moments worth interrupting.
+
+If you're an agent with a persistent loop, default to email + only push
+when you genuinely need a `Y/N` within minutes. Tell the user what your
+policy is up front so they know what to expect ("I'll email a daily
+recap; I'll only push when I need an approval before I can continue").
 
 ## When NOT to use
 
@@ -351,6 +372,46 @@ curl -X POST https://headsup.md/authorize/initiate -d "agent_id=YOUR_AGENT_ID"
 ```
 
 Tokens expire in 30 minutes. Single-use.
+
+### Hooking into agent permission flows
+
+If your runtime has a "should I run this tool / command?" approval prompt
+that currently blocks the terminal (Claude Code's `PreToolUse` hook,
+Codex's tool-call gate, Hermes / OpenClaw run-prompts, etc.), route it
+through a HeadsUp push instead so the user can approve from the lock
+screen — without sitting at their Mac.
+
+A reference shim ships at `tools/headsup-ask` in the repo: a small
+Python CLI that takes title/body/category, sends the push, polls
+`/v1/responses?message_id=…`, and exits with a button-id-keyed exit
+code (0=yes/approve, 1=no/cancel, 2=later, 3=timeout). Drop it into a
+hook config:
+
+```json
+// Claude Code: ~/.claude/settings.json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "$HOME/projects/headsup/tools/headsup-ask --title 'Approve bash?' --body \"$CLAUDE_TOOL_INPUT\" --category yes_no --timeout 600"
+        }]
+      }
+    ]
+  }
+}
+```
+
+Set `HEADSUP_USER_KEY` and `HEADSUP_API_KEY` in your shell environment so
+the agent uses your account. The hook exits non-zero when the user says no
+or doesn't reply; Claude Code (and most agents) treat that as a refusal
+and skip the tool call.
+
+Same pattern works for any agent that supports a "permission denied →
+abort" hook contract: the script stays the same, only the framework's
+config wiring differs.
 
 ### Users may never reply
 
