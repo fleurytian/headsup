@@ -18,13 +18,17 @@ Usage:
   Reads HEADSUP_USER_KEY, HEADSUP_API_KEY, HEADSUP_BASE from env if not
   passed. Default base: https://headsup.md.
 
-Exit codes (default --exit-map yes:0,confirm:0,approve:0,no:1,reject:1,
-cancel:1,later:2,remind_later:2):
-  0  — user approved (yes / confirm / approve / proceed)
-  1  — user rejected (no / cancel / reject / hold)
-  2  — user deferred (later / wait / snooze)
+Exit codes (defaults — override with --exit-map):
+  0  — allow once  (yes / confirm / approve / allow_once)
+  1  — deny        (no / cancel / reject / deny)
+  2  — defer       (later / wait / snooze)
   3  — timed out
   4  — internal error (network, auth, etc.)
+  10 — allow for the session  (permission_gate's allow_session button)
+  11 — allow always           (permission_gate's allow_always button)
+       Caller is expected to write the input shape to a cache file
+       (~/.headsup/session-allow.list or always-allow.list) and short-
+       circuit subsequent prompts that match.
 
 Stdout: the literal button_id chosen, or "TIMEOUT".
 
@@ -37,7 +41,10 @@ import argparse, json, os, sys, time, urllib.request, urllib.error
 DEFAULT_BASE = os.environ.get("HEADSUP_BASE", "https://headsup.md")
 DEFAULT_EXIT_MAP = {
     "yes": 0, "confirm": 0, "approve": 0, "proceed": 0, "ship": 0, "ok": 0,
-    "no": 1, "cancel": 1, "reject": 1, "hold": 1, "skip": 1,
+    "allow_once": 0,
+    "allow_session": 10,
+    "allow_always": 11,
+    "no": 1, "cancel": 1, "reject": 1, "hold": 1, "skip": 1, "deny": 1,
     "later": 2, "wait": 2, "snooze": 2, "remind_later": 2,
 }
 

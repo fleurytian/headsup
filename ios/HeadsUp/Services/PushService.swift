@@ -194,6 +194,10 @@ enum NotificationCategory: String, CaseIterable {
     case remindLaterSkip = "remind_later_skip"
     case actionDismiss = "action_dismiss"
     case feedback
+    /// 4-button category for agent tool-call permission gates.
+    /// allow_once / allow_session / allow_always / deny.
+    /// Used by tools/headsup-ask when wired into agent PreToolUse hooks.
+    case permissionGate = "permission_gate"
 
     var builtInActions: [UNNotificationAction] {
         self.actions.map { entry -> UNNotificationAction in
@@ -252,6 +256,17 @@ enum NotificationCategory: String, CaseIterable {
             return [
                 ("helpful",     "有帮助", "hand.thumbsup.fill", []),
                 ("not_helpful", "无帮助", "hand.thumbsdown.fill", []),
+            ]
+        case .permissionGate:
+            // 4 buttons in user-friendly order. iOS shows them in the order
+            // declared. "allow_once" first as the default (Return key on
+            // tvOS / safe choice on iPhone Settings flow); "deny" last as
+            // the destructive option.
+            return [
+                ("allow_once",    "本次同意",   "checkmark", []),
+                ("allow_session", "本会话同意", "checkmark.circle", []),
+                ("allow_always",  "永久同意",   "checkmark.shield.fill", []),
+                ("deny",          "拒绝",       "xmark",     [.destructive]),
             ]
         }
     }

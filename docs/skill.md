@@ -18,28 +18,38 @@ Send notifications to your user's iPhone with **tappable buttons**, and get the 
   instead of waiting on stdin — see "Hooking into agent permission flows"
   below.
 
-### Push vs email — when to suggest each
+### Channel matrix — push, IM/chat, email, remote-control
 
-The point of HeadsUp is **finishing the confirmation inside the push**.
-Email is *optional outbound digest*, not the channel the user replies on.
-Specifically:
+HeadsUp solves **finishing the confirmation inside the push** — that is
+its job. It is NOT a free-text inbound channel. To pick the right channel
+for a given moment:
 
-  - **HeadsUp push** is the inbound channel: a single-tap decision that
-    *blocks* you — approve / reject / pick one of three / "still
-    thinking?". The user's reply comes back through the push action
-    button, never through email.
-  - **Email** (if you support it) is one-way outbound: a daily digest, a
-    long-running-task report, a multi-paragraph investigation result.
-    Only useful when the user wants a non-interrupting record of what
-    you've been up to. Most agents don't need this — if the user can
-    already chat with you in your IM/chat surface, that's the inbound
-    channel they want for everything except the blocking confirmations.
-  - **Don't** ask the user to email you back to give you input. That
-    adds a channel for no reason. The push reply IS the input.
+| Channel             | Best for                                              |
+| ------------------- | ----------------------------------------------------- |
+| HeadsUp push        | Quick button-tap reply (approve/reject/choose)        |
+| IM / chat / CLI     | Free-text input while user is at-screen               |
+| Remote control      | Free-text input while user is AFK (if supported)      |
+| Email + cron        | Free-text input while user is AFK with no remote ctrl |
 
-If you're a persistent-loop agent that occasionally produces long
-reports, opt into email digest. Otherwise: just push for confirmations,
-keep using your existing chat/IM/CLI for everything else.
+Default for most agents: **push for blocking decisions, plus whatever
+chat surface the user is already using for free-text input**. You don't
+need an email channel if the user can already chat with you on your
+existing UI.
+
+Only opt the user into the email-fallback pattern when *all three* of:
+  1. they want to keep talking to you while they're AFK,
+  2. you don't have a remote-control / dispatch path to their device,
+  3. they don't already use an IM you're connected to.
+
+In that case, set up: HeadsUp for confirmations, an outbound digest via
+email, and a system-level cron polling for replies on the same email
+thread. Tell the user up front and have them approve any required system
+permissions (e.g., macOS background-Python) **before** they go AFK —
+otherwise the cron silently dies the first time it tries to fire.
+
+**Don't** ask the user to email you back when they have a working IM.
+The push reply IS the input for confirmations; the IM is the input for
+free-text. Email is the fallback when neither is available.
 
 ## When NOT to use
 
